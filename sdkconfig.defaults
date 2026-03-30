@@ -1,0 +1,50 @@
+# ============================================================================
+# ESP-HUB - SDK configuration for ESP32-C3 Super Mini
+# BLE (NimBLE) + WiFi coexistence
+# ============================================================================
+
+# ====== Bluetooth Enabled (NimBLE for ESP32-C3) ======
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+
+# ====== WiFi optimization for ESP32-C3 ======
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+
+# Increase main task stack (for BLE + WiFi init)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# ====== IP Forwarding / NAPT ======
+CONFIG_LWIP_IP_FORWARD=y
+CONFIG_LWIP_IPV4_NAPT=y
+CONFIG_LWIP_L2_TO_L3_COPY=y
+CONFIG_FREERTOS_HZ=1000
+
+# ====== mbedTLS PSK modes (required for WiFiClientSecure / ssl_client.cpp) ======
+CONFIG_MBEDTLS_PSK_MODES=y
+CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
+
+# ====== LittleFS (esp_littlefs component config) ======
+CONFIG_LITTLEFS_MAX_PARTITIONS=3
+CONFIG_LITTLEFS_PAGE_SIZE=256
+CONFIG_LITTLEFS_OBJ_NAME_LEN=64
+CONFIG_LITTLEFS_READ_SIZE=128
+CONFIG_LITTLEFS_WRITE_SIZE=128
+CONFIG_LITTLEFS_LOOKAHEAD_SIZE=128
+CONFIG_LITTLEFS_CACHE_SIZE=512
+CONFIG_LITTLEFS_BLOCK_CYCLES=512
+CONFIG_LITTLEFS_USE_MTIME=y
+CONFIG_LITTLEFS_MTIME_USE_SECONDS=y
+
+# ====== lwIP: prevent socket exhaustion on AP+STA+captive portal ======
+CONFIG_LWIP_MAX_SOCKETS=16
+CONFIG_LWIP_SO_REUSE=y
+CONFIG_LWIP_SO_REUSE_RXTOALL=y
+
+# ====== mbedTLS: reduce TLS I/O buffer sizes to save ~20KB heap per connection ======
+CONFIG_MBEDTLS_ASYMMETRIC_CONTENT_LEN=y
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192
+CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=4096
+
+# Arduino autostart (provides app_main)
+CONFIG_AUTOSTART_ARDUINO=y

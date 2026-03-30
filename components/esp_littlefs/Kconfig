@@ -1,0 +1,47 @@
+menu "LittleFS"
+
+    config LITTLEFS_MAX_PARTITIONS
+        int "Maximum Number of Partitions"
+        default 3
+        range 1 255
+
+    config LITTLEFS_PAGE_SIZE
+        int "LittleFS page size"
+        default 256
+        range 1 4096
+
+    config LITTLEFS_OBJ_NAME_LEN
+        int "Maximum object name length"
+        default 64
+        range 1 255
+
+    config LITTLEFS_READ_SIZE
+        int "Minimum size of a block read"
+        default 128
+
+    config LITTLEFS_WRITE_SIZE
+        int "Minimum size of a block program"
+        default 128
+
+    config LITTLEFS_LOOKAHEAD_SIZE
+        int "Size of the lookahead buffer"
+        default 128
+
+    config LITTLEFS_CACHE_SIZE
+        int "Size of the block cache"
+        default 512
+
+    config LITTLEFS_BLOCK_CYCLES
+        int "Block cycles for wear leveling"
+        default 512
+
+    config LITTLEFS_USE_MTIME
+        bool "Save file modification time"
+        default y
+
+    config LITTLEFS_MTIME_USE_SECONDS
+        bool "Store mtime as seconds since epoch"
+        default y
+        depends on LITTLEFS_USE_MTIME
+
+endmenu
