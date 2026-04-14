@@ -943,124 +943,7 @@ POST /reset/wifi
 
 ---
 
-## 12. AI Agent (LLM Integration)
-
-### 12.1 Отправить сообщение
-```
-POST /api/ai/chat
-Content-Type: application/json
-
-{"message": "Привет! Какой сейчас статус?"}
-```
-
-Отправить текстовое сообщение в AI Agent. Сообщение добавляется в очередь обработки.
-
-**Параметры**:
-- `message` (string) — текстовое сообщение для обработки
-
-**Ответ (200 OK)**:
-```json
-{
-  "queued": true
-}
-```
-
-**Ошибка (200 OK с error)**:
-```json
-{
-  "error": "busy"  // AI уже обрабатывает предыдущее сообщение
-}
-```
-
-```json
-{
-  "error": "AI disabled"  // AI Agent деактивирован в конфиге
-}
-```
-
-### 12.2 Получить статус обработки
-```
-GET /api/ai/status
-```
-
-Получить текущий статус обработки и последний ответ от AI.
-
-**Ответ (200 OK)**:
-```json
-{
-  "processing": false,
-  "seq": 42,
-  "response": "Статус: WiFi подключена к MyWiFi, heap 125432 байт, uptime 123456 сек"
-}
-```
-
-**Поля**:
-- `processing` — выполняется ли сейчас обработка
-- `seq` — номер последовательности (увеличивается на каждый новый ответ)
-- `response` — текст последнего ответа от AI (пустая строка если нет ответа)
-
-### 12.3 Очистить историю чата
-```
-POST /api/ai/history/clear
-```
-
-Очистить историю переговоров (context window).
-
-**Ответ (200 OK)**:
-```json
-{
-  "ok": true
-}
-```
-
-### 12.4 Загрузить модель (LM Studio)
-```
-POST /api/ai/lms/load
-Content-Type: application/json
-
-{"model": "qwen/qwen3-coder:7b", "context_length": 8000}
-```
-
-Отправить запрос на загрузку модели в LM Studio (если используется как провайдер).
-
-**Параметры**:
-- `model` (string) — имя модели для загрузки
-- `context_length` (number, опционально) — размер контекста в токенах
-
-**Ответ (200 OK)**:
-```json
-{
-  "status": "loaded",
-  "model": "qwen/qwen3-coder:7b",
-  "size_gb": 3.5,
-  "memory_used_gb": 3.5
-}
-```
-
-### 12.5 Выгрузить модель (LM Studio)
-```
-POST /api/ai/lms/unload
-Content-Type: application/json
-
-{"model": "qwen/qwen3-coder:7b"}
-```
-
-Отправить запрос на выгрузку модели из памяти LM Studio.
-
-**Параметры**:
-- `model` (string) — имя модели для выгрузки
-
-**Ответ (200 OK)**:
-```json
-{
-  "status": "unloaded",
-  "model": "qwen/qwen3-coder:7b"
-}
-```
-
----
-
-## 13. Примеры использования
+## 12. Примеры использования
 
 ### cURL
 
@@ -1146,60 +1029,7 @@ response = requests.post(url, data={'pin': 12, 'value': 1})
 print(response.json())
 ```
 
-**AI Agent — отправить сообщение и получить ответ**:
-```javascript
-// Отправить сообщение
-fetch('http://192.168.1.100/api/ai/chat', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({message: 'Привет! Какой сейчас статус?'})
-})
-.then(r => r.json())
-.then(data => {
-  if (data.queued) {
-    // Сообщение в очереди, полируем статус
-    let pollId = setInterval(() => {
-      fetch('http://192.168.1.100/api/ai/status')
-        .then(r => r.json())
-        .then(status => {
-          if (!status.processing) {
-            console.log('Ответ:', status.response);
-            clearInterval(pollId);
-          }
-        });
-    }, 1200);
-  } else if (data.error) {
-    console.log('Ошибка:', data.error);
-  }
-});
-```
-
-**AI Agent — Python**:
-```python
-import requests
-import time
-
-# Отправить сообщение
-response = requests.post('http://192.168.1.100/api/ai/chat', 
-                        json={'message': 'Включи свет'})
-print(response.json())  # {'queued': true}
-
-# Ждем ответа (полируем статус)
-while True:
-    status = requests.get('http://192.168.1.100/api/ai/status').json()
-    if not status['processing']:
-        print('Ответ:', status['response'])
-        break
-    time.sleep(1.2)
-
-# Очистить историю чата
-requests.post('http://192.168.1.100/api/ai/history/clear')
-print('История очищена')
-```
-
----
-
-## 14. Статус коды ошибок
+## 13. Статус коды ошибок
 
 | Код | Описание |
 |-----|----------|
@@ -1211,7 +1041,7 @@ print('История очищена')
 
 ---
 
-## 15. Примечания
+## 14. Примечания
 
 - Все значения цвета (R, FR, B, W) номализованы: **0-200**, где каждый шаг = 0.5%. Таким образом, значение 200 = 100%.
   - Пример: `red=100` → 50.0% яркости

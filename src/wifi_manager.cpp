@@ -2,10 +2,15 @@
 #include "system_clock.h"
 #include <esp_wifi.h>
 #include <esp_bt.h>
+#include <esp_netif.h>
 
 extern "C" {
 #include <lwip/lwip_napt.h>
 }
+
+static bool s_staEventHooked = false;
+static uint8_t s_authFailStreak = 0;
+static bool s_wpa2FallbackApplied = false;
 
 void WiFiManager::begin(const char* staSSID, const char* staPass,
                         const char* apSSID, const char* apPass,
@@ -16,6 +21,8 @@ void WiFiManager::begin(const char* staSSID, const char* staPass,
     _staPass = staPass;
     _apNatConfig = apNat;
     _lastApIp = IPAddress(0,0,0,0);
+    _noApFoundStreak = 0;
+    _retryBlockedUntil = 0;
 
     // Reset WiFi state (clear any leftover connections from flash)
     WiFi.persistent(false);
@@ -28,9 +35,8 @@ void WiFiManager::begin(const char* staSSID, const char* staPass,
         // AP+STA simultaneously — hotspot always visible
         WiFi.mode(WIFI_AP_STA);
         delay(200);
-        // WIFI_PS_NONE: disable modem sleep for stable AP+STA operation.
-        // BLE is disabled in config, so no coexistence abort risk.
-        // This prevents WiFi disconnects during long HTTP requests (e.g. LLM calls).
+        // Keep modem sleep disabled during STA auth/association for more
+        // reliable WPA2/WPA3 transition handshakes on ESP32-C3.
         WiFi.setSleep(false);  // WIFI_PS_NONE
         // Explicit AP subnet
         WiFi.softAPConfig(IPAddress(192,168,4,1),
@@ -68,11 +74,46 @@ void WiFiManager::begin(const char* staSSID, const char* staPass,
             for (int i = 0; i < plen; i++) Serial.printf("%02X ", (uint8_t)_staPass[i]);
             Serial.println();
         }
+        // Keep driver-level reconnect enabled for faster/stabler recovery.
         WiFi.setAutoReconnect(true);
-        WiFi.begin(_staSSID, _staPass);
-        _state = WIFI_ST_CONNECTING;
-        _connectStart = millis();
-        _lastRetry = millis();
+
+        if (!s_staEventHooked) {
+            WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+                if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED) {
+                    s_authFailStreak = 0;
+                    return;
+                }
+                if (event != ARDUINO_EVENT_WIFI_STA_DISCONNECTED) return;
+
+                uint8_t reason = info.wifi_sta_disconnected.reason;
+                if (reason == WIFI_REASON_AUTH_FAIL || reason == WIFI_REASON_AUTH_EXPIRE) {
+                    if (s_authFailStreak < 0xFF) s_authFailStreak++;
+                    if (s_authFailStreak >= 3 && !s_wpa2FallbackApplied) {
+#ifdef WIFI_AUTH_WPA2_PSK
+                        WiFi.setMinSecurity(WIFI_AUTH_WPA2_PSK);
+                        s_wpa2FallbackApplied = true;
+                        Serial.println(F("[WIFI] Auth fallback enabled: WPA2 threshold"));
+                        WiFi.reconnect();
+#endif
+                    }
+                } else {
+                    s_authFailStreak = 0;
+                }
+            });
+            s_staEventHooked = true;
+        }
+
+        bool sameSsid = (_apSSID && _staSSID && strcmp(_apSSID, _staSSID) == 0);
+        if (sameSsid) {
+            Serial.println(F("[WIFI] STA SSID equals AP SSID — skipping STA connect to avoid self-loop"));
+            _state = WIFI_ST_AP_MODE;
+            _lastRetry = millis();
+        } else {
+            WiFi.begin(_staSSID, _staPass);
+            _state = WIFI_ST_CONNECTING;
+            _connectStart = millis();
+            _lastRetry = millis();
+        }
     } else {
         // No STA credentials — pure AP mode
         Serial.println(F("[WIFI] No SSID configured, starting AP"));
@@ -148,6 +189,8 @@ WiFiState WiFiManager::tick() {
         case WIFI_ST_CONNECTING:
             if (WiFi.status() == WL_CONNECTED) {
                 _state = WIFI_ST_CONNECTED;
+                _noApFoundStreak = 0;
+                _retryBlockedUntil = 0;
                 
                 // Prominent WiFi connection announcement
                 Serial.println(F("\n╔════════════════════════════════════════╗"));
@@ -183,8 +226,21 @@ WiFiState WiFiManager::tick() {
                     }
                 }
                 
+            } else if (WiFi.status() == WL_NO_SSID_AVAIL && millis() - _connectStart > 10000) {
+                if (_noApFoundStreak < 10) _noApFoundStreak++;
+                uint32_t pauseMs = (uint32_t)_noApFoundStreak * 30000UL;
+                if (pauseMs > 300000UL) pauseMs = 300000UL;
+                _retryBlockedUntil = millis() + pauseMs;
+                Serial.printf("[WIFI] STA AP not found — AP-only mode for %lus (streak=%u)\n",
+                              (unsigned long)(pauseMs / 1000UL),
+                              (unsigned)_noApFoundStreak);
+                _state = WIFI_ST_AP_MODE;
+                _lastRetry = millis();
             } else if (millis() - _connectStart > 45000) { // Timeout 45s (increased for cold boot)
                 Serial.println(F("[WIFI] STA connect timeout, falling back to AP-only logically"));
+                if (_retryBlockedUntil < millis() + 30000UL) {
+                    _retryBlockedUntil = millis() + 30000UL;
+                }
                 _state = WIFI_ST_AP_MODE;
                 _lastRetry = millis();
             }
@@ -213,7 +269,7 @@ WiFiState WiFiManager::tick() {
                 restoreCaptivePortal();
                 _state = WIFI_ST_CONNECTING;
                 _connectStart = millis();
-                // Let auto-reconnect handle it, do not force WiFi.reconnect()
+                WiFi.reconnect();
             }
             break;
 
@@ -221,6 +277,8 @@ WiFiState WiFiManager::tick() {
             // Check if WiFi auto-reconnect happened in the background
             if (WiFi.status() == WL_CONNECTED) {
                 _state = WIFI_ST_CONNECTED;
+                _noApFoundStreak = 0;
+                _retryBlockedUntil = 0;
                 Serial.println(F("\n╔════════════════════════════════════════╗"));
                 Serial.println(F("║ ✓ STA Reconnected Automatically:       ║"));
                 Serial.printf("║   IP: %-35s ║\n", WiFi.localIP().toString().c_str());
@@ -228,20 +286,15 @@ WiFiState WiFiManager::tick() {
                 enableNAT();
                 break;
             }
+            if (_retryBlockedUntil && millis() < _retryBlockedUntil) {
+                break;
+            }
             // Periodically retry manually if auto-reconnect hasn't succeeded
             // Retry every 30 seconds to be more aggressive about reconnecting
             if (_staSSID && strlen(_staSSID) > 0 && (millis() - _lastRetry > 30000)) {
                 _lastRetry = millis();
                 Serial.printf("[WIFI] Periodically retrying STA: '%s'...\n", _staSSID);
-                {
-                    int plen = _staPass ? strlen(_staPass) : 0;
-                    Serial.printf("[WIFI] Pass len=%d bytes: ", plen);
-                    for (int i = 0; i < plen; i++) Serial.printf("%02X ", (uint8_t)_staPass[i]);
-                    Serial.println();
-                }
-                WiFi.disconnect(); // Clear state before begin
-                delay(100);
-                WiFi.begin(_staSSID, _staPass);
+                WiFi.reconnect();
                 _state = WIFI_ST_CONNECTING;
                 _connectStart = millis();
             }
@@ -325,25 +378,74 @@ String WiFiManager::apClientsMACs() const {
 // the upstream DNS (from STA) so AP clients can resolve hostnames normally.
 // Requires espressif32@5.3.0 (Arduino 2.x) where lwIP has forwarding compiled in.
 // ---------------------------------------------------------------------------
+void WiFiManager::ensureNaptInitialized() {
+    if (_naptInitialized) return;
+
+    // On the current Arduino-ESP32 lwIP API, ip_napt_init() is not exported.
+    // NAPT tables are prepared by the stack and ip_napt_enable() is the public toggle.
+    _naptInitialized = true;
+    Serial.println(F("[WIFI] NAPT ready (using ip_napt_enable API)"));
+}
+
 void WiFiManager::enableNAT() {
     if (_natEnabled) return;
-    _natEnabled = true;
 
     if (!_apNatConfig) {
+        _natEnabled = false;
         Serial.println(F("[WIFI] STA connected: keeping captive-portal DNS for auto-open"));
         return;
     }
 
-    Serial.println(F("[WIFI] STA connected: enabling NAT + DNS proxy (captive+forward)"));
+    _natEnabled = true;
+
+    ensureNaptInitialized();
+
+    IPAddress apIp = WiFi.softAPIP();
+    if (apIp == IPAddress(0,0,0,0)) {
+        Serial.println(F("[WIFI] NAT skipped: AP IP is not ready yet"));
+        _natEnabled = false;
+        return;
+    }
+
+    IPAddress upstreamDns = WiFi.dnsIP(0);
+    if (upstreamDns == IPAddress(0,0,0,0)) {
+        upstreamDns = IPAddress(1, 1, 1, 1);
+    }
+
+    Serial.printf("[WIFI] ===================== NAPT DIAGNOSTICS =====================\n");
+    Serial.printf("[WIFI] SoftAP IP (WiFi API): %s  (uint32: 0x%08X)\n", apIp.toString().c_str(), (uint32_t)apIp);
+    Serial.printf("[WIFI] Upstream DNS: %s\n", upstreamDns.toString().c_str());
+
+#if defined(ESP_IDF_VERSION_MAJOR)
+    for (esp_netif_t* netif = esp_netif_next(NULL); netif != NULL; netif = esp_netif_next(netif)) {
+        esp_netif_ip_info_t ip_info;
+        if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+            uint32_t netif_ip = ip_info.ip.addr;
+            const char* desc = esp_netif_get_desc(netif);
+            const char* key = esp_netif_get_ifkey(netif);
+            bool match = (netif_ip == (uint32_t)apIp);
+            Serial.printf("[WIFI] -> lwIP netif [%s|%s]: IP=%s (0x%08X) Match=%s\n", 
+                key ? key : "unk", desc ? desc : "unk", 
+                IPAddress(netif_ip).toString().c_str(), 
+                netif_ip, 
+                match ? "YES" : "NO");
+            if (match) {
+                Serial.printf("[WIFI] -> EXACT MATCH FOUND on netif %s\n", desc ? desc : "unk");
+            }
+        }
+    }
+#endif
+
     // Switch DNS proxy to forward mode:
     //   captive probe hosts -> 192.168.4.1  (portal auto-opens)
     //   all other hosts     -> forwarded to 1.1.1.1 (internet DNS works)
     if (_dnsStarted) {
-        _dns.setUpstream(IPAddress(1, 1, 1, 1));
+        _dns.setUpstream(upstreamDns);
     }
-    IPAddress apIp = WiFi.softAPIP();
+
     ip_napt_enable((uint32_t)apIp, 1);
-    Serial.println(F("[WIFI] NAT (IP Forwarding) Enabled!"));
+    Serial.printf("[WIFI] ==========================================================\n");
+    Serial.println(F("[WIFI] NAT (IP Forwarding) Enable function was called!"));
 }
 
 // Restore captive portal DNS when STA disconnects.
@@ -351,8 +453,9 @@ void WiFiManager::restoreCaptivePortal() {
     if (!_apRunning) return;
     _natEnabled = false;
 
-    // Disable NAPT routing
-    ip_napt_enable((uint32_t)WiFi.softAPIP(), 0);
+    // Do not deinit NAPT on transient STA loss.
+    // On ESP-IDF 4.4 (C3), frequent enable/disable cycles can trigger
+    // lwIP mem_free asserts in ip_napt_deinit().
     // Switch DNS proxy back to wildcard mode (all -> 192.168.4.1)
     if (_dnsStarted) {
         _dns.setUpstream(IPAddress(0,0,0,0));
@@ -386,12 +489,10 @@ void WiFiManager::reconcileApInterface() {
 
     // If NAT is active, move NAPT from old AP address to new one.
     if (_natEnabled) {
-        if (_lastApIp != IPAddress(0,0,0,0)) {
-            ip_napt_enable((uint32_t)_lastApIp, 0);
-        }
         ip_napt_enable((uint32_t)currentApIp, 1);
     }
 
     _lastApIp = currentApIp;
     Serial.printf("[WEB] AP portal URL: http://%s/\n", currentApIp.toString().c_str());
 }
+

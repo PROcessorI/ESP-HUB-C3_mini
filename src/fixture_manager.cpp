@@ -6,15 +6,28 @@
 // =============================================================================
 void FixtureManager::begin(FixtureConfig* cfg) {
     _cfg = cfg;
-    // UART1 для связи с драйвером (ESP32-C3: TX=GPIO4, RX=GPIO5)
-    Serial1.begin(FIXTURE_BAUD, SERIAL_8N1, FIXTURE_RX_PIN, FIXTURE_TX_PIN);
+    uint8_t txPin = FIXTURE_TX_PIN;
+    uint8_t rxPin = FIXTURE_RX_PIN;
+    uint32_t baud = FIXTURE_BAUD;
+
+    if (_cfg) {
+        txPin = _cfg->uart_tx_pin;
+        rxPin = _cfg->uart_rx_pin;
+        if (_cfg->uart_baud >= 1200) {
+            baud = _cfg->uart_baud;
+        }
+    }
+
+    // UART1 для связи с драйвером (ESP32-C3: TX=GPIO4, RX=GPIO3 по умолчанию)
+    Serial1.begin(baud, SERIAL_8N1, rxPin, txPin);
     _enabled = true;
     _currentRed = 0;
     _currentFarRed = 0;
     _currentBlue = 0;
     _currentWhite = 0;
 
-    Serial.printf("[FIXTURE] Initialized on UART1 (TX=%d, RX=%d)\n", FIXTURE_TX_PIN, FIXTURE_RX_PIN);
+    Serial.printf("[FIXTURE] Initialized on UART1 (TX=%u, RX=%u, %lu baud)\n",
+                  (unsigned)txPin, (unsigned)rxPin, (unsigned long)baud);
 
     // Начальное состояние — всё выключено
     setChannels(0, 0, 0, 0);

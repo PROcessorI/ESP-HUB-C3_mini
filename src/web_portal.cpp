@@ -41,13 +41,6 @@ void WebPortal::begin(ConfigManager* cfg, WiFiManager* wifi,
     _server.on("/mesh",      [this]() { handleMesh(); });
     _server.on("/camera",    [this]() { handleCamera(); });
     _server.on("/api/camera/relay", HTTP_GET, [this]() { handleApiCameraRelay(); });
-    _server.on("/ai",               [this]() { handleAI(); });
-    _server.on("/api/ai/chat",      HTTP_POST, [this]() { handleApiAiChat(); });
-    _server.on("/api/ai/status",    HTTP_GET,  [this]() { handleApiAiStatus(); });
-    _server.on("/api/ai/history/clear", HTTP_POST, [this]() { handleApiAiClearHistory(); });
-    // Загрузка/выгрузка модели (прямо в LM Studio, без получения списка)
-    _server.on("/api/ai/lms/load",   HTTP_POST, [this]() { handleApiAiLmsLoad(); });
-    _server.on("/api/ai/lms/unload", HTTP_POST, [this]() { handleApiAiLmsUnload(); });
     _server.on("/cron",             [this]() { handleCron(); });
     _server.on("/api/cron",         HTTP_GET,  [this]() { handleApiCronList(); });
     _server.on("/api/cron/add",     HTTP_POST, [this]() { handleApiCronAdd(); });
@@ -100,7 +93,6 @@ void WebPortal::begin(ConfigManager* cfg, WiFiManager* wifi,
     _server.on("/save/mesh",    HTTP_POST, [this]() { handleSaveMesh(); });
     _server.on("/api/mesh/toggle", HTTP_POST, [this]() { handleApiMeshToggle(); });
     _server.on("/save/camera",  HTTP_POST, [this]() { handleSaveCamera(); });
-    _server.on("/save/ai",      HTTP_POST, [this]() { handleSaveAI(); });
     _server.on("/save/fixture", HTTP_POST, [this]() { handleSaveFixture(); });
     _server.on("/save/fixture-scenarios", HTTP_POST, [this]() { handleSaveScenarios(); });
     _server.on("/save/fixture-timers", HTTP_POST, [this]() { handleSaveFixtureTimers(); });
@@ -256,7 +248,7 @@ void WebPortal::sendPageFooter() {
     _server.sendContent(F(
         "var TR={"
         "en:{dashboard:'Dashboard',sensors:'Sensors',system:'System',mqtt:'MQTT',api:'API',bluetooth:'Bluetooth',"
-        "camera:'ESP-CAM',cron:'CRON',ai:'AI',mesh:'Mesh',"
+        "camera:'ESP-CAM',cron:'CRON',mesh:'Mesh',"
         "fixtures:'Fixtures',status:'Status',livetel:'Live Telemetry',sensconf:'Sensor Configuration',"
         "mqttconf:'MQTT Configuration',wificonf:'WiFi Configuration',"
         "sysinfo:'System Info',actions:'Actions',enabled:'Enabled',"
@@ -319,7 +311,7 @@ void WebPortal::sendPageFooter() {
     _server.sendContent(F(
         "ru:{dashboard:'\u041f\u0430\u043d\u0435\u043b\u044c',sensors:'\u0414\u0430\u0442\u0447\u0438\u043a\u0438',system:'\u0421\u0438\u0441\u0442\u0435\u043c\u0430',mqtt:'MQTT',api:'API',"
         "fixtures:'\u0421\u0432\u0435\u0442\u0438\u043b\u044c\u043d\u0438\u043a\u0438',bluetooth:'Bluetooth',mesh:'\u041c\u0435\u0448',"
-        "camera:'ESP-CAM',cron:'\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a',ai:'\u0418\u0418',"
+        "camera:'ESP-CAM',cron:'\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a',"
         "status:'\u0421\u0442\u0430\u0442\u0443\u0441',livetel:'\u0422\u0435\u043b\u0435\u043c\u0435\u0442\u0440\u0438\u044f',sensconf:'\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u0434\u0430\u0442\u0447\u0438\u043a\u043e\u0432',"
         "mqttconf:'\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 MQTT',wificonf:'\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 WiFi',"
         "sysinfo:'\u041e \u0441\u0438\u0441\u0442\u0435\u043c\u0435',actions:'\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044f',enabled:'\u0412\u043a\u043b\u044e\u0447\u0451\u043d',"
@@ -462,12 +454,12 @@ String WebPortal::navBar(const String& active) {
         {"/mqtt",      "MQTT",       "mqtt"},
         {"/camera",    "ESP-CAM",    "camera"},
         {"/cron",      "CRON",       "cron"},
-        {"/ai",        "AI",         "ai"},
         {"/system",    "System",     "system"},
         {"/bluetooth", "Bluetooth",  "bluetooth"},
         {"/api",       "API",        "api"}
     };
-    for (int i = 0; i < 11; i++) {
+    const int itemCount = sizeof(items) / sizeof(items[0]);
+    for (int i = 0; i < itemCount; i++) {
         n += F("<a href='");
         n += items[i][0];
         n += F("' data-t='");
@@ -735,28 +727,13 @@ void WebPortal::handleRoot() {
         char idb[16];
         snprintf(idb, sizeof(idb), "%X", meshMgr.getNodeId());
         status += idb;
-        status += F("</div>");
-    }
-    status += F("</div>");
-
-    // AI Agent
-    static const char* provNames[] = {"LM Studio","Ollama","OpenAI","OpenRouter","Anthropic"};
-    status += F("<div>");
-    status += F("<div class='flex-between'><span>ИИ Агент</span>");
-    if (_cfg->cfg.ai_enabled) {
-        status += badge("Включён", "badge-green");
-    } else {
-        status += badge("Выключен", "badge-blue");
-    }
-    status += F("</div>");
-    if (_cfg->cfg.ai_enabled) {
-        status += F("<div class='text-muted'>");
-        uint8_t p = _cfg->cfg.ai_provider;
-        status += (p < 5) ? provNames[p] : "?";
-        if (_cfg->cfg.ai_model[0]) {
-            status += F(" / ");
-            status += _cfg->cfg.ai_model;
-        }
+#if MESH_SUPPORTED
+        status += F(" &bull; <a href='http://");
+        status += meshMgr.getMeshIP();
+        status += F("' style='color:var(--primary); font-weight:bold; text-decoration:none;'>");
+        status += meshMgr.getMeshIP();
+        status += F("</a>");
+#endif
         status += F("</div>");
     }
     status += F("</div>");
@@ -880,22 +857,6 @@ void WebPortal::handleRoot() {
         ov += F(" <a href='/fixtures'>&#9998;</a>");
     } else {
         ov += F("<a href='/fixtures'>Управление</a>");
-    }
-    ov += F("</div></div>");
-
-    // AI Rate Limiter (quick stats when disabled show nothing)
-    ov += F("<div><div class='flex-between'><span>AI запросы</span>");
-    if (_cfg->cfg.ai_enabled) {
-        ov += badge("Активен", "badge-green");
-    } else {
-        ov += badge("Выключен", "badge-blue");
-    }
-    ov += F("</div><div class='text-muted' style='font-size:11px'>");
-    if (_cfg->cfg.ai_enabled) {
-        ov += F("Сегодня: "); ov += rateLimiter.requestsToday();
-        ov += F(" &bull; <a href='/ai'>Чат</a>");
-    } else {
-        ov += F("<a href='/ai'>Включить</a>");
     }
     ov += F("</div></div>");
 
@@ -1915,21 +1876,6 @@ void WebPortal::handleSystem() {
         }
         cf += F("</select>");
 
-        cf += F("<hr style='border:0;border-top:1px solid var(--border);margin:15px 0'>");
-        cf += F("<p style='color:var(--txt2);font-size:13px;margin-top:0'><b>⚙️ ИИ Агент</b></p>");
-        cf += F("<div style='margin-bottom:14px'>");
-        cf += F("<label class='toggle' style='margin-bottom:8px'>");
-        cf += F("<input type='checkbox' name='ai_en' value='1' onchange='if(this.checked!==");
-        cf += (_cfg->cfg.ai_enabled ? '1' : '0');
-        cf += F("){if(confirm(\"Изменение статуса ИИ требует перезагрузки. Продолжить?\")){this.closest(\"form\").submit();} else {this.checked=");
-        cf += (_cfg->cfg.ai_enabled ? '1' : '0');
-        cf += F(";}}'");
-        if (_cfg->cfg.ai_enabled) cf += F(" checked");
-        cf += F("><span class='slider'></span> <span style='margin-left:8px'>ИИ Агент ");
-        cf += (_cfg->cfg.ai_enabled ? F("<b style='color:var(--green)'>Включен</b>") : F("<b style='color:var(--muted)'>Отключен</b>"));
-        cf += F("</span></label>");
-        cf += F("</div>");
-
         cf += submitButton("\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u0438 \u043F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C");
         cf += F("</form>");
         _server.sendContent(card("\u0427\u0430\u0441\u0442\u043E\u0442\u0430 CPU \u0438 Serial", cf));
@@ -2083,6 +2029,11 @@ void WebPortal::handleBluetooth() {
 void WebPortal::handleMesh() {
     startPage("Mesh");
     bool staConnected = _wifi && _wifi->isConnected();
+
+#if !MESH_PAINLESS_SUPPORTED
+    _server.sendContent(card("Mesh backend",
+        "<p class='text-muted'>На ESP32-C3 используется режим обнаружения узлов по клиентам точки доступа ESP-HUB-MESH (mesh-lite).</p>"));
+#endif
     
     // Settings form
     String sform;
@@ -2092,14 +2043,10 @@ void WebPortal::handleMesh() {
     sform += inputField("\u041f\u0430\u0440\u043e\u043b\u044c Mesh (8-63 \u0441\u0438\u043c\u0432.)", "mesh_pass", _cfg->cfg.mesh_pass, "password", "1234567890");
     sform += numberField("UDP \u043f\u043e\u0440\u0442", "mesh_port", _cfg->cfg.mesh_port, 1, 65535);
     sform += numberField("Wi-Fi \u043a\u0430\u043d\u0430\u043b", "mesh_ch", _cfg->cfg.mesh_channel, 1, 13);
-    if (!staConnected && _cfg->cfg.mesh_master_node) {
+    if (!staConnected) {
         sform += checkboxField("\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0443\u0437\u0435\u043b (\u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0432\u0441\u0435\u043c\u0438 \u0443\u0437\u043b\u0430\u043c\u0438)", "mesh_master", _cfg->cfg.mesh_master_node);
     } else {
-        if (staConnected) {
-            sform += F("<p class='text-muted' style='font-size:12px'>\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0430\u0442\u0435\u043b\u044c '\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0443\u0437\u0435\u043b' \u0441\u043a\u0440\u044b\u0442, \u0442\u0430\u043a \u043a\u0430\u043a \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0439 Wi-Fi \u0441\u0435\u0442\u0438.</p>");
-        } else {
-            sform += F("<p class='text-muted' style='font-size:12px'>\u0414\u0430\u043d\u043d\u044b\u0439 \u0443\u0437\u0435\u043b \u0432\u0435\u0434\u043e\u043c\u044b\u0439 (NODE), \u043f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0430\u0442\u0435\u043b\u044c '\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0443\u0437\u0435\u043b' \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d \u0442\u043e\u043b\u044c\u043a\u043e \u043d\u0430 \u0433\u043b\u0430\u0432\u043d\u043e\u043c \u0443\u0437\u043b\u0435.</p>");
-        }
+        sform += F("<p class='text-muted' style='font-size:12px'>\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0430\u0442\u0435\u043b\u044c '\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0443\u0437\u0435\u043b' \u0441\u043a\u0440\u044b\u0442, \u0442\u0430\u043a \u043a\u0430\u043a \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0439 Wi-Fi \u0441\u0435\u0442\u0438.</p>");
     }
     sform += F("<p class='text-muted' style='font-size:12px'>\u0414\u043b\u044f \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u0432\u0442\u043e\u0440\u043e\u0433\u043e \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u0430 \u0443\u043a\u0430\u0436\u0438\u0442\u0435 \u0442\u043e\u0447\u043d\u043e \u0442\u0435 \u0436\u0435 SSID, \u043f\u0430\u0440\u043e\u043b\u044c, \u043f\u043e\u0440\u0442 \u0438 \u043a\u0430\u043d\u0430\u043b \u043d\u0430 \u043e\u0431\u043e\u0438\u0445 \u0443\u0437\u043b\u0430\u0445.</p>");
     sform += submitButton("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c");
@@ -2114,8 +2061,13 @@ void WebPortal::handleMesh() {
     // Node ID
     st += F("<div><div class='flex-between'><span>Node ID</span>");
     bool meshEnabled = _cfg->cfg.mesh_enabled;
+#if MESH_SUPPORTED
     st += badge(meshEnabled ? "Active" : "Disabled", meshEnabled ? "badge-green" : "badge-yellow");
+#else
+    st += badge(meshEnabled ? "Unsupported" : "Disabled", meshEnabled ? "badge-red" : "badge-yellow");
+#endif
     st += F("</div><div class='text-muted' style='font-size:20px;font-weight:bold'>");
+#if MESH_SUPPORTED
     if (_mesh && meshEnabled) {
         char nodeid[20];
         snprintf(nodeid, sizeof(nodeid), "0x%X", _mesh->getNodeId());
@@ -2123,12 +2075,27 @@ void WebPortal::handleMesh() {
     } else {
         st += F("--");
     }
+#else
+    st += F("--");
+#endif
     st += F("</div><div class='text-muted' style='margin-top:4px'>Role: ");
     st += (_cfg->cfg.mesh_master_node ? "MASTER" : "NODE");
+#if MESH_SUPPORTED
+    if (_mesh && meshEnabled) {
+        st += F("<br><span style='color:var(--primary); font-weight:bold;'>Mesh AP IP: ");
+        st += _mesh->getMeshIP();
+        st += F("</span>");
+        
+        if (!_cfg->cfg.mesh_master_node) {
+           st += F("<br><span style='color:#e74c3c; font-size:11px;'>Внимание: Вы подключены к ретранслятору.<br>Для настройки системы подключитесь к MASTER узлу!</span>");
+        }
+    }
+#endif
     st += F("</div></div>");
     
     // Connected nodes
     st += F("<div><div class='flex-between'><span>\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043d\u044b\u0435 \u0443\u0437\u043b\u044b</span>");
+#if MESH_SUPPORTED
     if (_mesh && meshEnabled && _mesh->isConnected()) {
         st += badge("Connected", "badge-green");
     } else if (meshEnabled) {
@@ -2136,12 +2103,23 @@ void WebPortal::handleMesh() {
     } else {
         st += badge("Disabled", "badge-blue");
     }
+#else
+    if (meshEnabled) {
+        st += badge("Unsupported", "badge-red");
+    } else {
+        st += badge("Disabled", "badge-blue");
+    }
+#endif
     st += F("</div><div class='text-muted' style='font-size:20px;font-weight:bold'>");
+#if MESH_SUPPORTED
     if (_mesh && meshEnabled) {
         st += _mesh->getConnectedCount();
     } else {
         st += "0";
     }
+#else
+    st += "0";
+#endif
     st += F("</div></div>");
     
     st += F("</div>"); // end grid2
@@ -2223,7 +2201,7 @@ void WebPortal::handleMesh() {
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('light status')\" data-i18n-ru='\u0421\u0442\u0430\u0442\u0443\u0441' data-i18n-en='Status'>\u0421\u0442\u0430\u0442\u0443\u0441</button>");
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('dim up 10')\" data-i18n-ru='\u042f\u0440\u0447\u0435' data-i18n-en='Brighter'>\u042f\u0440\u0447\u0435</button>");
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('dim down 10')\" data-i18n-ru='\u0422\u0435\u043c\u043d\u0435\u0435' data-i18n-en='Darker'>\u0422\u0435\u043c\u043d\u0435\u0435</button>");
-    tools += F("<div style='width:100%;margin-top:8px'><label data-i18n-ru='\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)' data-i18n-en='Preset brightness (%)'>\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)</label><input type='range' id='mesh-light-br' min='5' max='100' value='100'><div class='text-muted' id='mesh-light-br-text'>100%</div></div>");
+    tools += F("<div style='width:100%;margin-top:8px'><label data-i18n-ru='\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)' data-i18n-en='Preset brightness (%)'>\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)</label><input type='range' id='mesh-light-br' min='0' max='100' value='100'><div class='text-muted' id='mesh-light-br-text'>100%</div></div>");
     tools += F("</div></details>");
 
     tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Mesh \u0441\u0435\u0440\u0432\u0438\u0441' data-i18n-en='Presets: Mesh service'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Mesh \u0441\u0435\u0440\u0432\u0438\u0441</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
@@ -2252,10 +2230,7 @@ void WebPortal::handleMesh() {
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('json')\">JSON</button>");
     tools += F("</div></details>");
 
-    tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: AI \u0438 Bluetooth' data-i18n-en='Presets: AI & Bluetooth'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: AI \u0438 Bluetooth</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ai status')\" data-i18n-ru='AI \u0441\u0442\u0430\u0442\u0443\u0441' data-i18n-en='AI status'>AI \u0441\u0442\u0430\u0442\u0443\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ai history')\" data-i18n-ru='AI \u0438\u0441\u0442\u043e\u0440\u0438\u044f' data-i18n-en='AI history'>AI \u0438\u0441\u0442\u043e\u0440\u0438\u044f</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ai clear')\" data-i18n-ru='AI \u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c' data-i18n-en='AI clear'>AI \u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c</button>");
+    tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Bluetooth' data-i18n-en='Presets: Bluetooth'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Bluetooth</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ble status')\" data-i18n-ru='BLE \u0441\u0442\u0430\u0442\u0443\u0441' data-i18n-en='BLE status'>BLE \u0441\u0442\u0430\u0442\u0443\u0441</button>");
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ble on')\" data-i18n-ru='BLE \u0432\u043a\u043b' data-i18n-en='BLE on'>BLE \u0432\u043a\u043b</button>");
     tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ble off')\" data-i18n-ru='BLE \u0432\u044b\u043a\u043b' data-i18n-en='BLE off'>BLE \u0432\u044b\u043a\u043b</button>");
@@ -2323,6 +2298,16 @@ void WebPortal::handleMesh() {
         "  var t=document.getElementById('mesh-light-br-text');"
         "  if(s&&t) t.textContent=(s.value||100)+'%';"
         "}"
+        "function meshSetBrightness(v){"
+        "  var s=document.getElementById('mesh-light-br');"
+        "  if(!s) return;"
+        "  var n=parseInt(v,10);"
+        "  if(isNaN(n)) return;"
+        "  if(n<0) n=0;"
+        "  if(n>100) n=100;"
+        "  s.value=n;"
+        "  meshUpdateBrightnessLabel();"
+        "}"
         "function updateMeshStatus(){"
         "  fetch('/api/mesh').then(r=>r.json()).then(d=>{"
         "    updateMeshTargetSelect('mesh-chat-target',d.nodes||[]);"
@@ -2359,6 +2344,22 @@ void WebPortal::handleMesh() {
         "  meshPost('/api/mesh/cmd','target='+encodeURIComponent(target)+'&run_local='+runLocal+'&cmd='+encodeURIComponent(cmd)).then(function(d){meshSetStatus(d.ok?'command done':'command error');meshRefreshLog();});"
         "}"
         "function meshRunPreset(cmd){"
+        "  var c=(cmd||'').toLowerCase().trim();"
+        "  var s=document.getElementById('mesh-light-br');"
+        "  var cur=parseInt((s&&s.value)?s.value:'100',10);"
+        "  if(isNaN(cur)) cur=100;"
+        "  if(c==='light on') meshSetBrightness(100);"
+        "  else if(c==='light off') meshSetBrightness(0);"
+        "  else if(c.indexOf('dim up')===0){"
+        "    var up=parseInt(c.replace(/[^0-9-]/g,''),10);"
+        "    if(isNaN(up)) up=10;"
+        "    meshSetBrightness(cur+up);"
+        "  }"
+        "  else if(c.indexOf('dim down')===0){"
+        "    var down=parseInt(c.replace(/[^0-9-]/g,''),10);"
+        "    if(isNaN(down)) down=10;"
+        "    meshSetBrightness(cur-down);"
+        "  }"
         "  var inp=document.getElementById('mesh-cmd-line');"
         "  if(inp) inp.value=cmd;"
         "  meshSendCmd();"
@@ -2366,7 +2367,8 @@ void WebPortal::handleMesh() {
         "function meshRunLightPreset(mode){"
         "  var s=document.getElementById('mesh-light-br');"
         "  var p=parseInt((s&&s.value)?s.value:'100',10);"
-        "  if(isNaN(p)||p<1)p=100;"
+        "  if(isNaN(p)||p<0)p=100;"
+        "  meshSetBrightness(p);"
         "  var v=Math.max(1,Math.min(200,Math.round(p*2)));"
         "  var cmd='';"
         "  if(mode==='red') cmd='R'+v;"
@@ -2409,6 +2411,12 @@ void WebPortal::handleApiMeshStatus() {
     String json = "{";
     json += F("\"enabled\":");
     json += _cfg->cfg.mesh_enabled ? "true" : "false";
+    json += F(",\"supported\":");
+#if MESH_SUPPORTED
+    json += "true";
+#else
+    json += "false";
+#endif
     json += F(",\"master\":");
     json += _cfg->cfg.mesh_master_node ? "true" : "false";
     json += F(",\"ssid\":\"");
@@ -2421,17 +2429,27 @@ void WebPortal::handleApiMeshStatus() {
     json += F(",\"masterSwitchVisible\":");
     json += (_wifi && _wifi->isConnected()) ? "false" : "true";
     json += F(",\"status\":\"");
+#if MESH_SUPPORTED
     if (_mesh && _cfg->cfg.mesh_enabled) {
         json += (_mesh->isConnected() ? "connected" : "offline");
         json += F("\",\"nodeId\":");
         json += _mesh->getNodeId();
-        json += F(",\"connectedCount\":");
+        json += F(",\"meshIp\":\"");
+        json += _mesh->getMeshIP();
+        json += F("\",\"connectedCount\":");
         json += _mesh->getConnectedCount();
         json += F(",\"nodes\":");
         json += _mesh->getNodeListJson();
     } else {
-        json += F("unavailable\",\"nodeId\":0,\"connectedCount\":0,\"nodes\":[]");
+        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[]");
     }
+#else
+    if (_cfg->cfg.mesh_enabled) {
+        json += F("unsupported\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[]");
+    } else {
+        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[]");
+    }
+#endif
     json += "}";
     _server.send(200, "application/json", json);
 }
@@ -2553,7 +2571,13 @@ void WebPortal::handleFixtures() {
     }
     st += F("</div>");
     if (_fixture->isEnabled()) {
-        st += F("<div class='text-muted'>UART2: TX=17, RX=16, 9600 baud</div>");
+        st += F("<div class='text-muted'>UART: TX=");
+        st += String(_cfg->cfg.fixture.uart_tx_pin);
+        st += F(", RX=");
+        st += String(_cfg->cfg.fixture.uart_rx_pin);
+        st += F(", ");
+        st += String(_cfg->cfg.fixture.uart_baud);
+        st += F(" baud</div>");
         if (_fixture->isLastAckOk()) {
             st += F("<div class='badge badge-green' style='margin-top:4px'><span data-t='fixture-ack-ok'>ACK OK</span></div>");
         } else {
@@ -2667,7 +2691,6 @@ void WebPortal::handleFixtures() {
 
     // Action buttons
     ctrl += F("<div style='margin-top:12px;display:flex;gap:8px'>");
-    ctrl += F("<button class='btn btn-primary' type='button' onclick='applyFixture()' data-t='fixture-apply'>\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c</button>");
     ctrl += F("<button class='btn btn-secondary' type='button' onclick='saveFixture()' data-t='fixture-save'>\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c</button>");
     ctrl += F("</div>");
     ctrl += F("</form>");
@@ -2887,27 +2910,42 @@ void WebPortal::handleFixtures() {
         "      .catch(()=>checkbox.checked=true);"
         "  }"
         "}"
-        "function syncSlider(id,val){"
+        "var fixtureLiveTimer=null;"
+        "function queueFixtureLiveApply(){"
+        "  if(fixtureLiveTimer) return;"
+        "  fixtureLiveTimer=setTimeout(function(){fixtureLiveTimer=null;applyFixture();},120);"
+        "}"
+        "function syncSlider(id,val,skipLive){"
+        "  var raw=parseInt(val,10);"
+        "  if(isNaN(raw)) raw=0;"
+        "  if(raw<0) raw=0; if(raw>200) raw=200;"
         "  var slider=document.getElementById(id);"
         "  var num=document.getElementById(id+'-num');"
         "  var lbl=document.getElementById(id+'-val');"
-        "  if(slider){slider.value=val;}"
-        "  if(num){num.value=(val*0.5).toFixed(1);}"
-        "  if(lbl){lbl.textContent=(val*0.5).toFixed(1)+'%';}"
-        "  console.log('[SLIDER] '+id+' = '+val+' (0-200)');"
+        "  if(slider){slider.value=raw;}"
+        "  if(num){num.value=(raw*0.5).toFixed(1);}"
+        "  if(lbl){lbl.textContent=(raw*0.5).toFixed(1)+'%';}"
+        "  if(!skipLive){queueFixtureLiveApply();}"
+        "  console.log('[SLIDER] '+id+' = '+raw+' (0-200)');"
         "}"
-        "function syncNum(id,val){"
+        "function syncNum(id,val,skipLive){"
+        "  var pct=parseFloat(val);"
+        "  if(isNaN(pct)) pct=0;"
+        "  if(pct<0) pct=0; if(pct>100) pct=100;"
         "  var slider=document.getElementById(id);"
+        "  var num=document.getElementById(id+'-num');"
         "  var lbl=document.getElementById(id+'-val');"
-        "  if(slider){slider.value=Math.round(val*2);}"
-        "  if(lbl){lbl.textContent=(val*0.5).toFixed(1)+'%';}"
-        "  console.log('[NUMBER] '+id+' = '+(val*0.5).toFixed(1)+'% (0-100)');"
+        "  if(slider){slider.value=Math.round(pct*2);}"
+        "  if(num){num.value=pct.toFixed(1);}"
+        "  if(lbl){lbl.textContent=pct.toFixed(1)+'%';}"
+        "  if(!skipLive){queueFixtureLiveApply();}"
+        "  console.log('[NUMBER] '+id+' = '+pct.toFixed(1)+'% (0-100)');"
         "}"
         "function applyFixture(){"
-        "  var red=parseInt(document.getElementById('red').value);"
-        "  var fr=parseInt(document.getElementById('fr').value);"
-        "  var blue=parseInt(document.getElementById('blue').value);"
-        "  var white=parseInt(document.getElementById('white').value);"
+        "  var red=parseInt(document.getElementById('red').value,10)||0;"
+        "  var fr=parseInt(document.getElementById('fr').value,10)||0;"
+        "  var blue=parseInt(document.getElementById('blue').value,10)||0;"
+        "  var white=parseInt(document.getElementById('white').value,10)||0;"
         "  var checkbox=document.getElementById('fix-pwr');"
         "  var is_on=(red>0||fr>0||blue>0||white>0);"
         "  console.log('[FIXTURE] Setting colors: R='+red+' FR='+fr+' B='+blue+' W='+white);"
@@ -2939,10 +2977,10 @@ void WebPortal::handleFixtures() {
         "  var names=['OFF','RED','FAR_RED','BLUE','WHITE','FULL','GROW'];"
         "  var v=presets[preset];"
         "  console.log('[FIXTURE] Preset '+preset+' ('+names[preset]+'): R='+v[0]+' FR='+v[1]+' B='+v[2]+' W='+v[3]);"
-        "  syncSlider('red',v[0]);"
-        "  syncSlider('fr',v[1]);"
-        "  syncSlider('blue',v[2]);"
-        "  syncSlider('white',v[3]);"
+        "  syncSlider('red',v[0],true);"
+        "  syncSlider('fr',v[1],true);"
+        "  syncSlider('blue',v[2],true);"
+        "  syncSlider('white',v[3],true);"
         "  applyFixture();"
         "}"
         "function enableAllScenarios(){"
@@ -3304,6 +3342,10 @@ void WebPortal::handleApiFixtureSet() {
     bool ok = _fixture->setChannels(red, fr, blue, white);
     
     if (ok) {
+        _cfg->cfg.fixture.red_brightness = red;
+        _cfg->cfg.fixture.far_red_brightness = fr;
+        _cfg->cfg.fixture.blue_brightness = blue;
+        _cfg->cfg.fixture.white_brightness = white;
         _server.send(200, "application/json", F("{\"ok\":true}"));
     } else {
         _server.send(500, "application/json", F("{\"error\":\"ACK failed\"}"));
@@ -3329,6 +3371,10 @@ void WebPortal::handleApiFixtureOn() {
     bool ok = _fixture->setChannels(red, fr, blue, white);
     
     if (ok) {
+        _cfg->cfg.fixture.red_brightness = red;
+        _cfg->cfg.fixture.far_red_brightness = fr;
+        _cfg->cfg.fixture.blue_brightness = blue;
+        _cfg->cfg.fixture.white_brightness = white;
         _server.send(200, "application/json", F("{\"ok\":true,\"status\":\"on\"}"));
     } else {
         _server.send(500, "application/json", F("{\"error\":\"ACK failed\"}"));
@@ -3348,6 +3394,10 @@ void WebPortal::handleApiFixtureOff() {
     bool ok = _fixture->setChannels(0, 0, 0, 0);
     
     if (ok) {
+        _cfg->cfg.fixture.red_brightness = 0;
+        _cfg->cfg.fixture.far_red_brightness = 0;
+        _cfg->cfg.fixture.blue_brightness = 0;
+        _cfg->cfg.fixture.white_brightness = 0;
         _server.send(200, "application/json", F("{\"ok\":true,\"status\":\"off\"}"));
     } else {
         _server.send(500, "application/json", F("{\"error\":\"ACK failed\"}"));
@@ -3398,6 +3448,10 @@ void WebPortal::handleApiFixtureColor() {
     bool ok = _fixture->setChannels(red, fr, blue, white);
     
     if (ok) {
+        _cfg->cfg.fixture.red_brightness = red;
+        _cfg->cfg.fixture.far_red_brightness = fr;
+        _cfg->cfg.fixture.blue_brightness = blue;
+        _cfg->cfg.fixture.white_brightness = white;
         String resp = F("{\"ok\":true,\"red\":");
         resp += String(red);
         resp += F(",\"fr\":");
@@ -3586,6 +3640,12 @@ void WebPortal::handleApiFixtureToggle() {
     const char* status;
     if (wasOn) {
         ok = _fixture->setChannels(0, 0, 0, 0);
+        if (ok) {
+            _cfg->cfg.fixture.red_brightness = 0;
+            _cfg->cfg.fixture.far_red_brightness = 0;
+            _cfg->cfg.fixture.blue_brightness = 0;
+            _cfg->cfg.fixture.white_brightness = 0;
+        }
         status = "off";
     } else {
         r  = _cfg->cfg.fixture.red_brightness;
@@ -3594,6 +3654,12 @@ void WebPortal::handleApiFixtureToggle() {
         w  = _cfg->cfg.fixture.white_brightness;
         if (!(r | fr | bl | w)) w = 20;
         ok = _fixture->setChannels(r, fr, bl, w);
+        if (ok) {
+            _cfg->cfg.fixture.red_brightness = r;
+            _cfg->cfg.fixture.far_red_brightness = fr;
+            _cfg->cfg.fixture.blue_brightness = bl;
+            _cfg->cfg.fixture.white_brightness = w;
+        }
         status = "on";
     }
     if (!ok) { _server.send(500, "application/json", F("{\"error\":\"ACK failed\"}")); return; }
@@ -3632,6 +3698,10 @@ void WebPortal::handleApiFixtureDim() {
     if (w  > 0) w  = constrain(w  + step, 0, 200);
     bool ok = _fixture->setChannels((uint8_t)r, (uint8_t)fr, (uint8_t)bl, (uint8_t)w);
     if (!ok) { _server.send(500, "application/json", F("{\"error\":\"ACK failed\"}")); return; }
+    _cfg->cfg.fixture.red_brightness = (uint8_t)r;
+    _cfg->cfg.fixture.far_red_brightness = (uint8_t)fr;
+    _cfg->cfg.fixture.blue_brightness = (uint8_t)bl;
+    _cfg->cfg.fixture.white_brightness = (uint8_t)w;
     String resp = F("{\"ok\":true,\"red\":"); resp += _fixture->getRed();
     resp += F(",\"fr\":"); resp += _fixture->getFarRed();
     resp += F(",\"blue\":"); resp += _fixture->getBlue();
@@ -3709,6 +3779,10 @@ void WebPortal::handleApiFixtureTimerTrigger() {
     FixtureTimerConfig& t = _cfg->cfg.fixture.timers[id];
     bool ok = _fixture->setChannels(t.red, t.far_red, t.blue, t.white);
     if (!ok) { _server.send(500, "application/json", F("{\"error\":\"ACK failed\"}")); return; }
+    _cfg->cfg.fixture.red_brightness = t.red;
+    _cfg->cfg.fixture.far_red_brightness = t.far_red;
+    _cfg->cfg.fixture.blue_brightness = t.blue;
+    _cfg->cfg.fixture.white_brightness = t.white;
     String resp = F("{\"ok\":true,\"id\":"); resp += id;
     resp += F(",\"red\":"); resp += t.red;
     resp += F(",\"fr\":"); resp += t.far_red;
@@ -3803,6 +3877,11 @@ void WebPortal::handleApiSystemStatus() {
     j += (_mesh && _cfg->cfg.mesh_enabled && _mesh->isConnected()) ? F("true") : F("false");
     j += F(",\"mesh_nodes\":");
     j += (_mesh && _cfg->cfg.mesh_enabled) ? _mesh->getConnectedCount() : 0;
+#if MESH_SUPPORTED
+    j += F(",\"mesh_ip\":\"");
+    if (_mesh) j += _mesh->getMeshIP();
+    j += F("\"");
+#endif
     j += F("}");
     _server.send(200, "application/json", j);
 }
@@ -4304,52 +4383,6 @@ void WebPortal::handleApiDocs() {
         "",
         "{\"ok\":true}", false));
 
-    // ===== AI Agent section header =====
-    _server.sendContent(F("<h3 style='margin:18px 0 6px;color:var(--txt2);font-size:14px;text-transform:uppercase;letter-spacing:.05em'>"
-        "\xF0\x9F\xA4\x96 \xD0\x98\xD0\x98 \xD0\x90\xD0\xB3\xD0\xB5\xD0\xBD\xD1\x82</h3>"));
-
-    // ===== POST /api/ai/chat =====
-    _server.sendContent(ep("ai1", "POST", "m-post", "/api/ai/chat",
-        "\xD0\x9E\xD1\x82\xD0\xBF\xD1\x80\xD0\xB0\xD0\xB2\xD0\xB8\xD1\x82\xD1\x8C \xD1\x81\xD0\xBE\xD0\xBE\xD0\xB1\xD1\x89\xD0\xB5\xD0\xBD\xD0\xB8\xD0\xB5 \xD0\xB0\xD0\xB3\xD0\xB5\xD0\xBD\xD1\x82\xD1\x83",
-        F("<tr><td>message</td><td>string</td><td>\xD0\xA2\xD0\xB5\xD0\xBA\xD1\x81\xD1\x82 \xD0\xB7\xD0\xB0\xD0\xBF\xD1\x80\xD0\xBE\xD1\x81\xD0\xB0</td></tr>"),
-        F("<label>message</label><input type='text' name='message' placeholder='\xD0\xA1\xD0\xBA\xD0\xBE\xD0\xBB\xD1\x8C\xD0\xBA\xD0\xBE \xD1\x81\xD0\xB5\xD0\xB9\xD1\x87\xD0\xB0\xD1\x81 \xD0\xB3\xD1\x80\xD0\xB0\xD0\xB4\xD1\x83\xD1\x81\xD0\xBE\xD0\xB2?'>"),
-        "{\"ok\":true}", false));
-
-    // ===== GET /api/ai/status =====
-    _server.sendContent(ep("ai2", "GET", "m-get", "/api/ai/status",
-        "\xD0\xA1\xD1\x82\xD0\xB0\xD1\x82\xD1\x83\xD1\x81 \xD0\xB0\xD0\xB3\xD0\xB5\xD0\xBD\xD1\x82\xD0\xB0: \xD0\xBE\xD0\xB1\xD1\x80\xD0\xB0\xD0\xB1\xD0\xBE\xD1\x82\xD0\xBA\xD0\xB0, \xD0\xBF\xD0\xBE\xD1\x81\xD0\xBB\xD0\xB5\xD0\xB4\xD0\xBD\xD0\xB8\xD0\xB9 \xD0\xBE\xD1\x82\xD0\xB2\xD0\xB5\xD1\x82, seq",
-        F("<tr><td>-</td><td>-</td><td>\xD0\x9F\xD0\xB0\xD1\x80\xD0\xB0\xD0\xBC\xD0\xB5\xD1\x82\xD1\x80\xD1\x8B \xD0\xBD\xD0\xB5 \xD1\x82\xD1\x80\xD0\xB5\xD0\xB1\xD1\x83\xD1\x8E\xD1\x82\xD1\x81\xD1\x8F</td></tr>"),
-        "",
-        "{\"processing\":false,\"seq\":3,\"response\":\"\xD0\xA2\xD0\xB5\xD0\xBC\xD0\xBF\xD0\xB5\xD1\x80\xD0\xB0\xD1\x82\xD1\x83\xD1\x80\xD0\xB0 22.5\\u00b0C\"}",
-        true));
-
-    // ===== POST /api/ai/history/clear =====
-    _server.sendContent(ep("ai3", "POST", "m-post", "/api/ai/history/clear",
-        "\xD0\x9E\xD1\x87\xD0\xB8\xD1\x81\xD1\x82\xD0\xB8\xD1\x82\xD1\x8C \xD0\xB8\xD1\x81\xD1\x82\xD0\xBE\xD1\x80\xD0\xB8\xD1\x8E \xD0\xB4\xD0\xB8\xD0\xB0\xD0\xBB\xD0\xBE\xD0\xB3\xD0\xB0",
-        F("<tr><td>-</td><td>-</td><td>\xD0\x9F\xD0\xB0\xD1\x80\xD0\xB0\xD0\xBC\xD0\xB5\xD1\x82\xD1\x80\xD1\x8B \xD0\xBD\xD0\xB5 \xD1\x82\xD1\x80\xD0\xB5\xD0\xB1\xD1\x83\xD1\x8E\xD1\x82\xD1\x81\xD1\x8F</td></tr>"),
-        "",
-        "{\"ok\":true}", false));
-
-    // ===== LM Studio sub-header =====
-    _server.sendContent(F("<h3 style='margin:18px 0 6px;color:var(--txt2);font-size:14px;text-transform:uppercase;letter-spacing:.05em'>"
-        "\xF0\x9F\x96\xA5 LM Studio</h3>"));
-
-    // ===== POST /api/ai/lms/load =====
-    _server.sendContent(ep("lms2", "POST", "m-post", "/api/ai/lms/load",
-        "\xD0\x97\xD0\xB0\xD0\xB3\xD1\x80\xD1\x83\xD0\xB7\xD0\xB8\xD1\x82\xD1\x8C \xD0\xBC\xD0\xBE\xD0\xB4\xD0\xB5\xD0\xBB\xD1\x8C (JSON body)",
-        F("<tr><td>model</td><td>string</td><td>ID \xD0\xBC\xD0\xBE\xD0\xB4\xD0\xB5\xD0\xBB\xD0\xB8</td></tr>"
-          "<tr><td>context_length</td><td>int</td><td>\xD0\xA0\xD0\xB0\xD0\xB7\xD0\xBC\xD0\xB5\xD1\x80 \xD0\xBA\xD0\xBE\xD0\xBD\xD1\x82\xD0\xB5\xD0\xBA\xD1\x81\xD1\x82\xD0\xB0 (\xD1\x82\xD0\xBE\xD0\xBA\xD0\xB5\xD0\xBD\xD1\x8B)</td></tr>"),
-        F("<label>model</label><input type='text' name='model' placeholder='qwen3-8b'>"
-          "<label>context_length</label><input type='number' name='context_length' value='20000'>"),
-        "{\"ok\":true}", false));
-
-    // ===== POST /api/ai/lms/unload =====
-    _server.sendContent(ep("lms3", "POST", "m-post", "/api/ai/lms/unload",
-        "\xD0\x92\xD1\x8B\xD0\xB3\xD1\x80\xD1\x83\xD0\xB7\xD0\xB8\xD1\x82\xD1\x8C \xD0\xBC\xD0\xBE\xD0\xB4\xD0\xB5\xD0\xBB\xD1\x8C (JSON body)",
-        F("<tr><td>instance_id</td><td>string</td><td>ID \xD1\x8D\xD0\xBA\xD0\xB7\xD0\xB5\xD0\xBC\xD0\xBF\xD0\xBB\xD1\x8F\xD1\x80\xD0\xB0 (\xD0\xB8\xD0\xB7 /api/ai/lms/models)</td></tr>"),
-        F("<label>instance_id</label><input type='text' name='instance_id' placeholder='instance-0'>"),
-        "{\"ok\":true}", false));
-
     // ===== CRON section header =====
     _server.sendContent(F("<h3 style='margin:18px 0 6px;color:var(--txt2);font-size:14px;text-transform:uppercase;letter-spacing:.05em'>"
         "\xE2\x8F\xB0 CRON</h3>"));
@@ -4366,7 +4399,7 @@ void WebPortal::handleApiDocs() {
     _server.sendContent(ep("cr2", "POST", "m-post", "/api/cron/add",
         "\xD0\x94\xD0\xBE\xD0\xB1\xD0\xB0\xD0\xB2\xD0\xB8\xD1\x82\xD1\x8C \xD0\xB7\xD0\xB0\xD0\xB4\xD0\xB0\xD1\x87\xD1\x83 CRON",
         F("<tr><td>expr</td><td>string</td><td>CRON-\xD0\xB2\xD1\x8B\xD1\x80\xD0\xB0\xD0\xB6\xD0\xB5\xD0\xBD\xD0\xB8\xD0\xB5 (5 \xD0\xBF\xD0\xBE\xD0\xBB\xD0\xB5\xD0\xB9, \xD0\xBD\xD0\xB0\xD0\xBF\xD1\x80. 0 8 * * *)</td></tr>"
-          "<tr><td>action</td><td>string</td><td>\xD0\x94\xD0\xB5\xD0\xB9\xD1\x81\xD1\x82\xD0\xB2\xD0\xB8\xD0\xB5: light full / light off / sensor read / ai &lt;text&gt;</td></tr>"),
+                    "<tr><td>action</td><td>string</td><td>\xD0\x94\xD0\xB5\xD0\xB9\xD1\x81\xD1\x82\xD0\xB2\xD0\xB8\xD0\xB5: light full / light off / read / mesh status</td></tr>"),
         F("<label>expr</label><input type='text' name='expr' placeholder='0 8 * * *'>"
           "<label>action</label><input type='text' name='action' placeholder='light full'>"),
         "{\"ok\":true,\"id\":1}", false));
@@ -4501,9 +4534,10 @@ void WebPortal::handleWifiSetup() {
            ".status{font-size:13px;color:#8b949e;text-align:center;margin-bottom:14px;"
            "background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px 12px}"
            ".ok{color:#3fb950}.warn{color:#d29922}"
-           ".full{width:100%;margin-top:12px;padding:8px;"
+           ".full{width:100%;margin-top:12px;padding:10px 8px;line-height:1.2;"
            "background:#21262d;border:1px solid #30363d;border-radius:6px;"
-           "color:#58a6ff;font-size:13px;text-align:center;text-decoration:none;display:block}"
+           "color:#58a6ff;font-size:13px;text-align:center;text-decoration:none;"
+           "display:flex;align-items:center;justify-content:center;box-sizing:border-box}"
            "</style></head><body><div class='box'>"
            "<h2>ESP-HUB Wi-Fi</h2>"
            "<div class='sub'>\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F</div>");
@@ -4778,16 +4812,6 @@ void WebPortal::handleSaveSensors() {
 void WebPortal::handleSaveSystem() {
     // Обработка сохранения системных настроек из веб-интерфейса
     bool changed = false;
-    bool ai_changed = false;
-    
-    // Проверка состояния AI агента
-    bool prev_ai_enabled = _cfg->cfg.ai_enabled;
-    _cfg->cfg.ai_enabled = _server.hasArg("ai_en");
-    if (_cfg->cfg.ai_enabled != prev_ai_enabled) {
-        ai_changed = true;
-        changed = true;
-        Serial.printf("[WEB] ИИ Агент %s\n", _cfg->cfg.ai_enabled ? "включен" : "отключен");
-    }
     
     // Сохранение частоты процессора (80 / 160 / 240 МГц)
     if (_server.hasArg("cpu_freq")) {
@@ -4812,9 +4836,6 @@ void WebPortal::handleSaveSystem() {
     // Если что-то изменилось - сохраняем в LittleFS и перезагружаемся
     if (changed) {
         _cfg->save();
-        if (ai_changed && _cfg->cfg.ai_enabled) {
-            aiAgent.notifyEnabled();  // notify via Telegram if enabled
-        }
     }
     _server.send(200, "text/html",
         F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
@@ -5244,576 +5265,6 @@ void WebPortal::handleSaveCamera() {
     _server.send(302);
 }
 
-// ================================================================
-//                        AI AGENT PAGE
-// ================================================================
-
-void WebPortal::handleAI() {
-    // Default models per provider (shown as placeholder when model field is empty)
-    // Index matches provider ID: 0=LM Studio, 1=Ollama, 2=OpenAI, 3=OpenRouter, 4=Anthropic
-    static const char* provDefUrls[] = {
-        "http://192.168.1.125:1234/v1/chat/completions",
-        "http://127.0.0.1:11434/v1/chat/completions",
-        "https://api.openai.com/v1/chat/completions",
-        "https://openrouter.ai/api/v1/chat/completions",
-        "https://api.anthropic.com/v1/messages"
-    };
-    static const char* provDefModels[] = {
-        "qwen/qwen3-vl-8b",
-        "qwen3:8b",
-        "gpt-4o-mini",
-        "qwen/qwen3-coder:free",
-        "claude-3-5-haiku-20241022"
-    };
-    static const char* provNames[] = {
-        "LM Studio (local)", "Ollama (local)",
-        "OpenAI", "OpenRouter", "Anthropic"
-    };
-
-    uint8_t prov = _cfg->cfg.ai_provider;
-
-    // ── Card 1: Basic settings ────────────────────────────────────
-    String sf;
-    sf += F("<form method='POST' action='/save/ai'>");
-
-    // Enable toggle
-    sf += F("<div class='row-between' style='margin-bottom:14px'>"
-            "<b>ИИ Агент</b>"
-            "<label class='toggle'>"
-            "<input type='checkbox' name='ai_en' value='1' onchange='if(this.checked!==");
-    sf += (_cfg->cfg.ai_enabled ? '1' : '0');
-    sf += F("){if(confirm(\"Изменение статуса требует перезагрузки. Продолжить?\")){var f=this.closest(\"form\");var inp=document.createElement(\"input\");inp.type=\"hidden\";inp.name=\"sys_reboot\";inp.value=\"1\";f.appendChild(inp);f.submit();} else {this.checked=");
-    sf += (_cfg->cfg.ai_enabled ? '1' : '0');
-    sf += F(";}}'");
-    if (_cfg->cfg.ai_enabled) sf += F(" checked");
-    sf += F("><span class='slider'></span></label></div>");
-
-    // Provider
-    sf += F("<label>Провайдер</label><select name='ai_prov' id='ai-prov' class='input-field' "
-            "onchange='aiProvChange()'>");
-    for (int i = 0; i < 5; i++) {
-        sf += F("<option value='"); sf += i; sf += "'";
-        if (prov == i) sf += F(" selected");
-        sf += ">"; sf += provNames[i]; sf += F("</option>");
-    }
-    sf += F("</select>");
-
-    // LM Studio-only: dedicated base URL for model browser + API
-    sf += F("<div id='lms-url-row'");
-    if (prov != 0) sf += F(" style='display:none'");
-    sf += F("><label>LM Studio URL "
-            "<span style='font-weight:normal;font-size:0.82em;color:var(--muted)'>"
-            "(адрес сервера, напр. http://192.168.1.125:1234)</span></label>"
-            "<input type='text' name='ai_lms' id='ai-lms-url' class='input-field'"
-            " placeholder='http://192.168.1.125:1234' value='");
-    sf += htmlAttr(_cfg->cfg.ai_lms_url);
-    sf += F("'></div>");
-
-    // Model + Load/Unload buttons (LM Studio only)
-    sf += F("<label>Модель <span id='ai-mod-hint' style='font-weight:normal;"
-            "font-size:0.82em;color:var(--muted)'>(по умолчанию: ");
-    sf += provDefModels[prov];
-    sf += F(") <b style='color:var(--warn)'>⚠ При изменении требуется перезагрузка</b></span></label>"
-            "<input type='text' name='ai_model' id='ai-model' class='input-field'"
-            " placeholder='");
-    sf += provDefModels[prov];
-    sf += F("' value='");
-    // Show current model or default if empty
-    if (_cfg->cfg.ai_model[0]) {
-        sf += htmlAttr(_cfg->cfg.ai_model);
-    } else {
-        sf += provDefModels[prov];
-    }
-    sf += F("' style='margin-bottom:8px' title='Имя модели для загрузки (сохраняется в конфиг)'>"
-            "<div style='display:flex;gap:4px' id='lms-outer'");
-    if (prov != 0) sf += F(" style='display:none'");
-    sf += F(">"
-            "<button type='button' class='btn btn-primary' id='lms-btn-load' "
-            "onclick='lmsLoad()' style='white-space:nowrap;flex:1' "
-            "title='Загрузить эту модель в LM Studio прямо сейчас'");
-    if (prov != 0) sf += F(" style='display:none'");
-    sf += F(">Загрузить</button>"
-            "<button type='button' class='btn btn-secondary' id='lms-btn-unload' "
-            "onclick='lmsUnload()' style='white-space:nowrap;flex:1' "
-            "title='Выгрузить модель из памяти LM Studio'");
-    if (prov != 0) sf += F(" style='display:none'");
-    sf += F(">Выгрузить</button></div>"
-            "<div style='font-size:0.82em;color:var(--muted);margin-top:4px'>"
-            "Поле сохраняется в конфиг и применяется после перезагрузки. "
-            "Кнопки Load/Unload управляют моделью в LM Studio прямо сейчас.</div>");
-
-    // API URL
-    sf += F("<label>API URL <span id='ai-url-hint' style='font-weight:normal;"
-            "font-size:0.82em;color:var(--muted)'>(по умолчанию: ");
-    sf += provDefUrls[prov];
-    sf += F(")</span></label>"
-            "<input type='text' name='ai_url' id='ai-url' class='input-field'"
-            " placeholder='");
-    sf += provDefUrls[prov];
-    sf += F("' value='");
-    sf += htmlAttr(_cfg->cfg.ai_api_url);
-    sf += F("'>");
-
-    // API Key
-    sf += F("<label>API Ключ <span style='font-weight:normal;font-size:0.82em;"
-            "color:var(--muted)'>(OpenAI / OpenRouter / Anthropic)</span></label>"
-            "<input type='password' name='ai_key' class='input-field' "
-            "placeholder='");
-    sf += _cfg->cfg.ai_api_key[0] ? F("(сохранён, оставьте пустым для сохранения)") : F("sk-...");
-    sf += F("'>");
-
-    // Max tokens + context size in a 2-col grid
-    sf += F("<div class='grid2' style='gap:12px'>");
-    sf += F("<div><label>Макс. токенов <span style='font-weight:normal;"
-            "font-size:0.82em;color:var(--muted)'>(длина ответа)</span></label>"
-            "<input type='number' name='ai_maxtok' class='input-field'"
-            " min='64' max='8192' value='");
-    sf += _cfg->cfg.ai_max_tokens;
-    sf += F("'></div>");
-    sf += F("<div><label>Размер контекста <span style='font-weight:normal;"
-            "font-size:0.82em;color:var(--muted)'>(локальные модели, токены)</span></label>"
-            "<input type='number' name='ai_ctx' class='input-field'"
-            " min='1024' max='128000' value='");
-    sf += _cfg->cfg.ai_ctx_size;
-    sf += F("'></div></div>");
-
-    // Temperature + Tool rounds
-    sf += F("<div class='grid2' style='gap:12px'>");
-    sf += F("<div><label>Температура <span style='font-weight:normal;"
-            "font-size:0.82em;color:var(--muted)' id='ai-temp-val'>(");
-    sf += (_cfg->cfg.ai_temperature / 10);
-    sf += F(".");
-    sf += (_cfg->cfg.ai_temperature % 10);
-    sf += F(")</span></label>"
-            "<input type='range' name='ai_temp' id='ai-temp-range'"
-            " min='0' max='100' value='");
-    sf += _cfg->cfg.ai_temperature;
-    sf += F("' oninput=\"document.getElementById('ai-temp-val').textContent="
-            "'('+Math.floor(this.value/10)+'.'+this.value%10+')'\">"
-            "</div>");
-    sf += F("<div><label>Макс. раундов инструментов</label>"
-            "<input type='number' name='ai_rounds' class='input-field'"
-            " min='1' max='20' value='");
-    sf += _cfg->cfg.ai_tool_rounds;
-    sf += F("'></div></div>");
-
-    sf += F("<hr>");
-
-    // System prompt
-    sf += F("<label>Системный промпт <span style='font-weight:normal;font-size:0.82em;"
-            "color:var(--muted)'>(пусто = встроенный по умолчанию)</span></label>"
-            "<textarea name='ai_sysprompt' class='input-field' rows='4'"
-            " placeholder='Вы — ИИ ESP-HUB...'>");
-    sf += htmlAttr(_cfg->cfg.ai_sys_prompt);
-    sf += F("</textarea>");
-
-    sf += F("<hr>");
-
-    // Telegram
-    sf += F("<div class='row-between' style='margin-bottom:6px'>"
-            "<b>Telegram Бот</b></div>");
-    sf += checkboxField("Включить", "ai_tg_en", _cfg->cfg.ai_tg_enabled);
-    sf += inputField("Токен бота", "ai_tg_tok", _cfg->cfg.ai_tg_token, "text",
-                     "1234567890:AAF...");
-    sf += inputField("Allowed Chat ID (белый список, пусто = все)", "ai_tg_cid",
-                     _cfg->cfg.ai_tg_chat_id, "text", "-100123456789");
-
-    sf += submitButton("Сохранить");
-    sf += F("</form>");
-
-    // JS: update placeholders when provider changes
-    sf += F("<script>");
-    sf += F("var AI_MOD=['qwen/qwen3-vl-8b','qwen3:8b','gpt-4o-mini',"
-            "'qwen/qwen3-coder:free','claude-3-5-haiku-20241022'];");
-    sf += F("var AI_URL=['http://127.0.0.1:1234/v1/chat/completions',"
-            "'http://127.0.0.1:11434/v1/chat/completions',"
-            "'https://api.openai.com/v1/chat/completions',"
-            "'https://openrouter.ai/api/v1/chat/completions',"
-            "'https://api.anthropic.com/v1/messages'];");
-    sf += F("function aiProvChange(){"
-            "  var p=parseInt(document.getElementById('ai-prov').value);"
-            "  document.getElementById('ai-model').placeholder=AI_MOD[p];"
-            "  document.getElementById('ai-url').placeholder=AI_URL[p];"
-            "  document.getElementById('ai-mod-hint').textContent='(по умолчанию: '+AI_MOD[p]+')';"
-            "  document.getElementById('ai-url-hint').textContent='(по умолчанию: '+AI_URL[p]+')';"
-            "  var lo=document.getElementById('lms-outer');"
-            "  if(lo)lo.style.display=p===0?'flex':'none';"
-            "  var lr=document.getElementById('lms-url-row');"
-            "  if(lr)lr.style.display=p===0?'':'none';"
-            "  document.getElementById('lms-btn-load').style.display=p===0?'':'none';"
-            "  document.getElementById('lms-btn-unload').style.display=p===0?'':'none';"
-            "}"
-            "function lmsLoad(){"
-            "  var m=document.getElementById('ai-model').value.trim()||document.getElementById('ai-model').placeholder;"
-            "  var btn=document.getElementById('lms-btn-load');"
-            "  var txt=btn.textContent;btn.textContent='Загружаю...';btn.disabled=true;"
-            "  var ctx=parseInt(document.querySelector('input[name=\"ai_ctx\"]').value)||4096;"
-            "  var ctrl=new AbortController();"
-            "  var timeout=setTimeout(()=>ctrl.abort(),180000);"
-            "  fetch('/api/ai/lms/load',{"
-            "    method:'POST',"
-            "    headers:{'Content-Type':'application/json'},"
-            "    body:JSON.stringify({model:m,context_length:ctx}),"
-            "    signal:ctrl.signal})"
-            "  .then(r=>{clearTimeout(timeout);if(r.ok)return r.json();throw new Error('HTTP '+r.status);})"
-            "  .then(function(d){"
-            "    btn.textContent=txt;btn.disabled=false;"
-            "    if(d.error){alert('Ошибка загрузки: '+d.error);}"
-            "    else if(d.status==='loaded'){alert('Успешно! Модель '+d.instance_id+' загружена за '+d.load_time_seconds+'с');}"
-            "    else{alert('Загрузка начата. Проверьте статус в LM Studio.');}"
-            "  }).catch(function(e){"
-            "    btn.textContent=txt;btn.disabled=false;"
-            "    if(e.name==='AbortError')alert('Таймаут (3 мин). Загрузка может все еще идти в LM Studio.');"
-            "    else if(e.message.includes('Failed'))alert('Нет связи с LM Studio. Проверьте адрес: '+document.getElementById('ai-lms-url').value);"
-            "    else alert('Ошибка: '+e.message);"
-            "  });"
-            "}"
-            "function lmsUnload(){"
-            "  var m=document.getElementById('ai-model').value.trim()||document.getElementById('ai-model').placeholder;"
-            "  var btn=document.getElementById('lms-btn-unload');"
-            "  var txt=btn.textContent;btn.textContent='Выгружаю...';btn.disabled=true;"
-            "  var ctrl=new AbortController();"
-            "  var timeout=setTimeout(()=>ctrl.abort(),30000);"
-            "  fetch('/api/ai/lms/unload',{"
-            "    method:'POST',"
-            "    headers:{'Content-Type':'application/json'},"
-            "    body:JSON.stringify({model:m}),"
-            "    signal:ctrl.signal})"
-            "  .then(r=>{clearTimeout(timeout);if(r.ok)return r.json();throw new Error('HTTP '+r.status);})"
-            "  .then(function(d){"
-            "    btn.textContent=txt;btn.disabled=false;"
-            "    if(d.error){alert('Ошибка выгрузки: '+d.error);}"
-            "    else{alert('Модель '+m+' успешно выгружена.');}"
-            "  }).catch(function(e){"
-            "    btn.textContent=txt;btn.disabled=false;"
-            "    if(e.name==='AbortError')alert('⏱️ Таймаут подключения');"
-            "    else alert('Ошибка: '+e.message);"
-            "  });"
-            "}"
-            "</script>");
-
-    // ── Card 2: Chat ──────────────────────────────────────────────
-    String ch;
-    ch += F("<div id='ai-resp' style='min-height:70px;padding:10px;"
-            "background:var(--card-bg);border:1px solid var(--border);"
-            "border-radius:6px;margin-bottom:8px;white-space:pre-wrap;"
-            "font-size:0.92em;max-height:400px;overflow-y:auto'>&#8203;</div>"
-            "<div style='display:flex;flex-direction:column;gap:8px;margin-bottom:6px'>"
-            "<textarea id='ai-msg' class='input-field' style='width:100%;min-height:80px;resize:vertical;margin:0;font-family:inherit' "
-            "placeholder='Введите сообщение... (Enter - отправить, Shift+Enter - перенос)' "
-            "onkeydown='if(event.key==\"Enter\" && !event.shiftKey){event.preventDefault();aiSend()}'></textarea>"
-            "<div style='display:flex;gap:8px'>"
-            "<button class='btn btn-primary' style='flex:1;padding:10px;font-size:1.1em' onclick='aiSend()'>Отправить</button>"
-            "<button class='btn btn-secondary' style='padding:10px' onclick='aiClear()'>Очистить</button>"
-            "</div></div>"
-            "<div id='ai-status' style='font-size:0.82em;color:var(--muted)'></div>"
-            "<script>"
-            "var _aiPollId=null,_aiSeq=0;"
-            "function aiSend(){"
-            "  var m=document.getElementById('ai-msg').value.trim();"
-            "  if(!m)return;"
-            "  document.getElementById('ai-msg').value='';"
-            "  document.getElementById('ai-msg').disabled=true;"
-            "  document.getElementById('ai-status').textContent='Обработка...';"
-            "  fetch('/api/ai/chat',{method:'POST',"
-            "    headers:{'Content-Type':'application/json'},"
-            "    body:JSON.stringify({message:m})})"
-            "  .then(r=>r.json()).then(function(d){"
-            "    document.getElementById('ai-msg').disabled=false;"
-            "    if(d.error){document.getElementById('ai-status').textContent=d.error;return;}"
-            "    if(_aiPollId)clearInterval(_aiPollId);"
-            "    _aiPollId=setInterval(aiPoll,1200);"
-            "  }).catch(function(){"
-            "    document.getElementById('ai-msg').disabled=false;"
-            "    document.getElementById('ai-status').textContent='Ошибка';"
-            "  });"
-            "}"
-            "function aiPoll(){"
-            "  fetch('/api/ai/status').then(r=>r.json()).then(function(d){"
-            "    if(!d.processing&&d.seq!==_aiSeq){"
-            "      _aiSeq=d.seq;"
-            "      var el=document.getElementById('ai-resp');"
-            "      el.textContent=d.response||'';"
-            "      el.scrollTop=el.scrollHeight;"
-            "      document.getElementById('ai-status').textContent='';"
-            "      clearInterval(_aiPollId);_aiPollId=null;"
-            "    }"
-            "  });"
-            "}"
-            "function aiClear(){"
-            "  fetch('/api/ai/history/clear',{method:'POST'})"
-            "  .then(function(){"
-            "    document.getElementById('ai-resp').textContent='';"
-            "    document.getElementById('ai-status').textContent='История очищена';"
-            "    _aiSeq=0;"
-            "  });"
-            "}"
-            "</script>");
-
-    // ── Model status card ──
-    String ms;
-    ms += F("<div class='row-between' style='margin-bottom:10px'>");
-    ms += F("<div><b>Текущая модель:</b><br>");
-    if (_cfg->cfg.ai_model[0]) {
-        ms += F("<code style='background:var(--bg2);padding:4px 8px;border-radius:4px;font-size:0.9em'>");
-        ms += htmlAttr(_cfg->cfg.ai_model);
-        ms += F("</code>");
-    } else {
-        ms += F("<span style='color:var(--muted);font-style:italic'>Не установлена</span>");
-    }
-    ms += F("</div>");
-    ms += F("<div style='text-align:right'>");
-    if (_cfg->cfg.ai_enabled) {
-        ms += badge("AI Включен", "badge-green");
-    } else {
-        ms += badge("AI Отключен", "badge-gray");
-    }
-    ms += F("</div></div>");
-    ms += F("<hr><div style='font-size:0.85em;color:var(--muted)'>");
-    ms += F("Провайдер: <b>");
-    static const char* provs[] = {"LM Studio", "Ollama", "OpenAI", "OpenRouter", "Anthropic"};
-    ms += provs[_cfg->cfg.ai_provider];
-    ms += F("</b></div>");
-
-    startPage("AI");
-    _server.sendContent(card("<b>Статус модели</b>", ms));
-    _server.sendContent(card("<b>Настройки ИИ агента</b>", sf));
-    _server.sendContent(card("<b>Чат</b>", ch));
-    _server.sendContent(F("<script>applyLang();</script>"));
-    endPage();
-}
-
-void WebPortal::handleSaveAI() {
-    if (_server.method() != HTTP_POST) { _server.send(405); return; }
-
-    bool prev_enabled = _cfg->cfg.ai_enabled;
-    bool model_changed = false;
-    bool sys_reboot_requested = _server.hasArg("sys_reboot");
-    
-    // Check if model will change
-    if (_server.hasArg("ai_model")) {
-        const char* new_model = _server.arg("ai_model").c_str();
-        if (strcmp(_cfg->cfg.ai_model, new_model) != 0) {
-            model_changed = true;
-        }
-    }
-
-    // Обработать ai_en ДО проверки перезагрузки
-    _cfg->cfg.ai_enabled  = _server.hasArg("ai_en");
-    _cfg->cfg.ai_provider = (uint8_t)(_server.hasArg("ai_prov")
-                            ? _server.arg("ai_prov").toInt() : 0);
-
-    if (_server.hasArg("ai_lms"))
-        strlcpy(_cfg->cfg.ai_lms_url, _server.arg("ai_lms").c_str(),
-                sizeof(_cfg->cfg.ai_lms_url));
-    if (_server.hasArg("ai_url"))
-        strlcpy(_cfg->cfg.ai_api_url, _server.arg("ai_url").c_str(),
-                sizeof(_cfg->cfg.ai_api_url));
-    if (_server.hasArg("ai_model"))
-        strlcpy(_cfg->cfg.ai_model, _server.arg("ai_model").c_str(),
-                sizeof(_cfg->cfg.ai_model));
-    // Only overwrite key when user submitted a non-empty value
-    if (_server.hasArg("ai_key") && _server.arg("ai_key").length() > 0)
-        strlcpy(_cfg->cfg.ai_api_key, _server.arg("ai_key").c_str(),
-                sizeof(_cfg->cfg.ai_api_key));
-    if (_server.hasArg("ai_tg_tok"))
-        strlcpy(_cfg->cfg.ai_tg_token, _server.arg("ai_tg_tok").c_str(),
-                sizeof(_cfg->cfg.ai_tg_token));
-    if (_server.hasArg("ai_tg_cid"))
-        strlcpy(_cfg->cfg.ai_tg_chat_id, _server.arg("ai_tg_cid").c_str(),
-                sizeof(_cfg->cfg.ai_tg_chat_id));
-    _cfg->cfg.ai_tg_enabled = _server.hasArg("ai_tg_en");
-    if (_server.hasArg("ai_sysprompt"))
-        strlcpy(_cfg->cfg.ai_sys_prompt, _server.arg("ai_sysprompt").c_str(),
-                sizeof(_cfg->cfg.ai_sys_prompt));
-
-    if (_server.hasArg("ai_maxtok"))
-        _cfg->cfg.ai_max_tokens  = (uint16_t)constrain(_server.arg("ai_maxtok").toInt(), 64, 8192);
-    if (_server.hasArg("ai_ctx"))
-        _cfg->cfg.ai_ctx_size    = (uint16_t)constrain(_server.arg("ai_ctx").toInt(), 1024, 128000);
-    if (_server.hasArg("ai_temp"))
-        _cfg->cfg.ai_temperature = (uint8_t)constrain(_server.arg("ai_temp").toInt(), 0, 100);
-    if (_server.hasArg("ai_rounds"))
-        _cfg->cfg.ai_tool_rounds = (uint8_t)constrain(_server.arg("ai_rounds").toInt(), 1, 20);
-
-    _cfg->save();
-    if (!prev_enabled && _cfg->cfg.ai_enabled)
-        aiAgent.notifyEnabled();
-    
-    // Если была запрошена перезагрузка системы — перезагружаемся
-    if (sys_reboot_requested) {
-        _server.sendHeader("Location", "/ai");
-        _server.send(302);
-        delay(400);
-        ESP.restart();
-        return;
-    }
-    
-    // If model was changed and AI is enabled, require restart to apply new model
-    if (model_changed && _cfg->cfg.ai_enabled) {
-        // Return a page with auto-redirect/reboot message with proper theme and encoding
-        String html = F("<html><head><meta charset='utf-8'>"
-                        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                        "<script>var _th=localStorage.getItem('theme')||'dark';"
-                        "if(_th==='light')document.documentElement.classList.add('light');</script>"
-                        "<style>"
-                        ":root{--bg:#0f1117;--txt:#e1e4e8;--acc:#58a6ff}"
-                        "html.light{--bg:#f6f8fa;--txt:#24292f;--acc:#0969da}"
-                        "body{background:var(--bg);color:var(--txt);font-family:sans-serif;"
-                        "padding:60px 20px;text-align:center;margin:0}"
-                        "h2{color:var(--acc)}"
-                        "</style>"
-                        "<title>ESP-HUB</title></head><body>"
-                        "<h2>Модель или настройки изменены</h2>"
-                        "<p>Перезагружаю устройство...</p>"
-                        "<script>setTimeout(function(){location.href='/ai';}, 2000);</script>"
-                        "</body></html>");
-        _server.sendHeader("Connection", "close");
-        _server.send(200, "text/html; charset=utf-8", html);
-        delay(600);
-        ESP.restart();
-        return;
-    }
-    
-    _server.sendHeader("Location", "/ai");
-    _server.send(302);
-}
-
-void WebPortal::handleApiAiChat() {
-    if (_server.method() != HTTP_POST) { _server.send(405); return; }
-    if (!_cfg->cfg.ai_enabled) {
-        _server.send(200, "application/json", "{\"error\":\"AI disabled\"}");
-        return;
-    }
-    String body = _server.arg("plain");
-    JsonDocument doc;
-    if (deserializeJson(doc, body) != DeserializationError::Ok || !doc["message"].is<const char*>()) {
-        _server.send(400, "application/json", "{\"error\":\"bad request\"}");
-        return;
-    }
-    const char* msg = doc["message"];
-    if (!aiAgent.submitMessage(msg)) {
-        _server.send(200, "application/json", "{\"error\":\"busy\"}");
-    } else {
-        _server.send(200, "application/json", "{\"queued\":true}");
-    }
-}
-
-void WebPortal::handleApiAiStatus() {
-    JsonDocument doc;
-    doc["processing"] = aiAgent.isProcessing();
-    doc["seq"]        = (int)aiAgent.responseSeq();
-    doc["response"]   = aiAgent.lastResponse();
-    String out; serializeJson(doc, out);
-    _server.sendHeader("Connection", "close");
-    _server.send(200, "application/json", out);
-}
-
-void WebPortal::handleApiAiClearHistory() {
-    aiAgent.clearHistory();
-    _server.send(200, "application/json", "{\"ok\":true}");
-}
-
-// ── LM Studio model manager proxies ──────────────────────────────────────────
-static String lmsBaseUrl(ConfigManager* cfg) {
-    String base;
-    // 1. Dedicated LMS URL field takes priority
-    if (cfg->cfg.ai_lms_url[0]) {
-        base = String(cfg->cfg.ai_lms_url);
-        Serial.printf("[LMS] base from ai_lms_url: %s\n", base.c_str());
-        return base;
-    }
-    // 2. Extract base from full chat API URL if set
-    if (cfg->cfg.ai_api_url[0]) {
-        String url = String(cfg->cfg.ai_api_url);
-        int proto = url.indexOf("://");
-        if (proto >= 0) {
-            int slash = url.indexOf('/', proto + 3);
-            base = (slash >= 0) ? url.substring(0, slash) : url;
-            Serial.printf("[LMS] base from ai_api_url: %s\n", base.c_str());
-            return base;
-        }
-    }
-    base = String("http://127.0.0.1:1234");
-    Serial.printf("[LMS] base fallback: %s\n", base.c_str());
-    return base;
-}
-
-void WebPortal::handleApiAiLmsLoad() {
-    if (_server.method() != HTTP_POST) { _server.send(405); return; }
-    String body = _server.arg("plain");
-    Serial.printf("[LMS] Load request body: %s\n", body.c_str());
-    if (!body.length()) {
-        _server.send(400, "application/json", "{\"error\":\"missing body\"}");
-        return;
-    }
-    
-    // Send immediate success response (202 Accepted) to avoid client timeout
-    _server.send(202, "application/json", "{\"status\":\"starting\"}");
-    
-    // Extract model name for notifications
-    String modelKey = "";
-    {
-        JsonDocument bd;
-        if (deserializeJson(bd, body) == DeserializationError::Ok)
-            modelKey = bd["model"].as<String>();
-    }
-    
-    // Do the actual load in background
-    String base = lmsBaseUrl(_cfg);
-    String url = base + "/api/v1/models/load";
-    Serial.printf("[LMS] POST %s\n", url.c_str());
-    HTTPClient http;
-    http.begin(url);
-    http.setTimeout(120000);   // model load can take a while (max 120s)
-    http.addHeader("Content-Type", "application/json");
-    int code = http.POST(body);
-    String resp = (code > 0) ? http.getString() : "";
-    Serial.printf("[LMS] Load resp code=%d body=%s\n", code, resp.c_str());
-    http.end();
-    
-    if (code == 200) {
-        Serial.printf("[LMS] \xE2\x9C\x85 Модель загружена: %s\n", modelKey.c_str());
-        // Telegram notification
-        if (_cfg->cfg.ai_tg_token[0] && _cfg->cfg.ai_tg_chat_id[0]) {
-            String tgMsg = String("\xF0\x9F\x96\xA5 LM Studio: модель загружена\n\xF0\x9F\xA4\x96 ") + modelKey;
-            aiAgent.sendTelegram(tgMsg.c_str(), atoll(_cfg->cfg.ai_tg_chat_id));
-        }
-    } else {
-        Serial.printf("[LMS] \xE2\x9D\x8C Ошибка загрузки модели: %s (code=%d)\n", modelKey.c_str(), code);
-    }
-}
-
-void WebPortal::handleApiAiLmsUnload() {
-    if (_server.method() != HTTP_POST) { _server.send(405); return; }
-    String body = _server.arg("plain");
-    Serial.printf("[LMS] Unload request body: %s\n", body.c_str());
-    if (!body.length()) {
-        _server.send(400, "application/json", "{\"error\":\"missing body\"}");
-        return;
-    }
-    
-    // Send immediate success response
-    _server.send(200, "application/json", "{\"status\":\"unloading\"}");
-    
-    String base = lmsBaseUrl(_cfg);
-    String url = base + "/api/v1/models/unload";
-    Serial.printf("[LMS] POST %s\n", url.c_str());
-    HTTPClient http;
-    http.begin(url);
-    http.setTimeout(15000);
-    http.addHeader("Content-Type", "application/json");
-    int code = http.POST(body);
-    String resp = (code > 0) ? http.getString() : "";
-    Serial.printf("[LMS] Unload resp code=%d\n", code);
-    http.end();
-    if (code == 200) {
-        Serial.printf("[LMS] \xE2\x9C\x85 Модель выгружена\n");
-    } else {
-        Serial.printf("[LMS] \xE2\x9D\x8C Ошибка выгрузки модели (code=%d)\n", code);
-    }
-}
-
 // ════════════════════════════════════════════════════════════════
 // NAT TOGGLE API
 // ════════════════════════════════════════════════════════════════
@@ -5914,7 +5365,7 @@ void WebPortal::handleCron() {
     String hdr;
     hdr.reserve(400);
     hdr += F("<div class='grid2'>");
-    hdr += F("<div><b>Планировщик задач</b><br><span class='text-muted'>Задачи запускаются AI-агентом</span></div>");
+    hdr += F("<div><b>Планировщик задач</b><br><span class='text-muted'>Задачи запускаются как консольные команды</span></div>");
     hdr += F("<div><div class='flex-between'><span>Часовой пояс</span></div>");
     char tzb[64]; cronMgr.getTimezone(tzb, sizeof(tzb));
     hdr += F("<div style='display:flex;gap:8px;margin-top:4px'>");
@@ -5952,7 +5403,7 @@ void WebPortal::handleCron() {
               "</div>");
     form += F("</div>");
     form += F("<div style='grid-column:span 2'>");
-    form += F("<label>Действие (текст для AI)</label>");
+    form += F("<label>Действие (команда)</label>");
     form += F("<input id='c_act' type='text' class='input' placeholder='Свет R:80% W:20%' required>");
     form += F("</div>");
     form += F("</div>");

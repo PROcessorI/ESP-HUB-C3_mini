@@ -12,7 +12,6 @@
 #include "sensor_manager.h"
 #include "ble_manager.h"
 #include "fixture_manager.h"
-#include "ai_agent.h"
 #include "cron_manager.h"
 #include "rate_limiter.h"
 #include "mesh_manager.h"
@@ -48,19 +47,12 @@ private:
     void handleCamera();          // ESP-CAM viewer + settings
     void handleApiCameraRelay();  // GET /api/camera/relay?path=... (proxy to cam)
     void handleSaveCamera();      // POST /save/camera
-    void handleAI();              // GET /ai — AI agent page
-    void handleSaveAI();          // POST /save/ai — save AI settings
-    void handleApiAiChat();       // POST /api/ai/chat — submit message
-    void handleApiAiStatus();     // GET /api/ai/status — get response
-    void handleApiAiClearHistory();// POST /api/ai/history/clear
     void handleApiMeshStatus();   // GET /api/mesh - get mesh status JSON
     void handleApiMeshSendChat(); // POST /api/mesh/chat
     void handleApiMeshSendData(); // POST /api/mesh/data
     void handleApiMeshSendCmd();  // POST /api/mesh/cmd
     void handleApiMeshLog();      // GET /api/mesh/log
     void handleApiMeshLogClear(); // POST /api/mesh/log/clear
-    void handleApiAiLmsLoad();     // POST /api/ai/lms/load
-    void handleApiAiLmsUnload();   // POST /api/ai/lms/unload
     void handleCron();             // GET  /cron — CRON scheduler page
     void handleApiCronList();      // GET  /api/cron
     void handleApiCronAdd();       // POST /api/cron/add

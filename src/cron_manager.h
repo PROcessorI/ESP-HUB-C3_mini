@@ -1,7 +1,7 @@
 #pragma once
 // ============== CRON Manager ==============
 // Periodic/daily/once task scheduler for ESP-HUB.
-// Fires by calling aiAgent.submitMessage() (polled via pollFired()).
+// Exposes fired actions via pollFired() for main-loop dispatch.
 // Entries are persisted to /cron.json on LittleFS.
 
 #include <Arduino.h>
@@ -72,7 +72,6 @@ public:
     bool isTimeSynced() const;
 
     // Poll for a fired action — returns true + copies action to buf.
-    // Call from main loop BEFORE aiAgent.tick().
     bool pollFired(char* buf, size_t len);
 
     // Called every second from background task

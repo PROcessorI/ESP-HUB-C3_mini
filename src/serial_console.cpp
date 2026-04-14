@@ -31,21 +31,23 @@ void SerialConsole::begin(ConfigManager*  cfg,
                           SensorManager* sensors,
                           BLEManager*    ble,
                           FixtureManager* fixture,
-                          AiAgent*       ai,
                           MeshManager*   mesh) {
     _cfg     = cfg;
     _wifi    = wifi;
     _sensors = sensors;
     _ble     = ble;
     _fixture = fixture;
-    _ai      = ai;
     _mesh    = mesh;
     _lastAuto = 0;
     _buf.reserve(128);
-    // Initialize auto sensor print interval from config
-    if (_cfg) {
-        _autoSec = _cfg->cfg.sensor_interval_s;
-        _autoLast = millis() - (uint32_t)_autoSec * 1000UL;  // fire soon
+    // Keep serial auto-print disabled by default. It can flood the terminal
+    // and make interactive command input feel unresponsive.
+    _autoSec = 0;
+    _autoLast = millis();
+
+    if (!_initialized) {
+        _initialized = true;
+        printBanner();
     }
 }
 
@@ -187,7 +189,6 @@ void SerialConsole::processLine(const String& line) {
     else if (cmd == "monitor" || cmd == "watch") cmdMonitor();
     else if (cmd == "mqtt")                     cmdMqtt(args);
     else if (cmd == "json")                     cmdJson();
-    else if (cmd == "ai")                       cmdAi(args);
     else if (cmd == "reboot" || cmd == "restart"
                              || cmd == "rst") {
         Serial.println(C_YLW "Rebooting..." C_RST);
@@ -564,7 +565,13 @@ bool SerialConsole::parseLightCommand(const String& line) {
         
         Serial.printf(C_YLW "[LIGHT] " C_WHT "R=%d FR=%d B=%d W=%d (%.1f%% %.1f%% %.1f%% %.1f%%)" C_RST "\n",
                       red, farRed, blue, white, red*0.5, farRed*0.5, blue*0.5, white*0.5);
-        _fixture->setChannels(red, farRed, blue, white);
+        bool ok = _fixture->setChannels(red, farRed, blue, white);
+        if (ok && _cfg) {
+            _cfg->cfg.fixture.red_brightness = red;
+            _cfg->cfg.fixture.far_red_brightness = farRed;
+            _cfg->cfg.fixture.blue_brightness = blue;
+            _cfg->cfg.fixture.white_brightness = white;
+        }
         return true;
     }
     
@@ -574,33 +581,44 @@ bool SerialConsole::parseLightCommand(const String& line) {
 void SerialConsole::cmdLight(const String& args) {
     if (!_fixture) { Serial.println(C_RED "  No fixture manager" C_RST); return; }
     if (!_fixture->isEnabled()) { Serial.println(C_RED "  Fixture manager disabled" C_RST); return; }
+
+    auto applyAndRemember = [this](uint8_t red, uint8_t farRed, uint8_t blue, uint8_t white) {
+        bool ok = _fixture->setChannels(red, farRed, blue, white);
+        if (ok && _cfg) {
+            _cfg->cfg.fixture.red_brightness = red;
+            _cfg->cfg.fixture.far_red_brightness = farRed;
+            _cfg->cfg.fixture.blue_brightness = blue;
+            _cfg->cfg.fixture.white_brightness = white;
+        }
+        return ok;
+    };
     
     String a = args; a.trim(); a.toLowerCase();
 
     if (a == "off") {
         Serial.println(C_YLW "[LIGHT] All OFF" C_RST);
-        _fixture->setChannels(0, 0, 0, 0);
+        applyAndRemember(0, 0, 0, 0);
     }
     else if (a == "red") {
         Serial.println(C_YLW "[LIGHT] Red 100%" C_RST);
-        _fixture->setChannels(FIXTURE_BRIGHTNESS_100, 0, 0, 0);
+        applyAndRemember(FIXTURE_BRIGHTNESS_100, 0, 0, 0);
     }
     else if (a == "farred") {
         Serial.println(C_YLW "[LIGHT] Far Red 100%" C_RST);
-        _fixture->setChannels(0, FIXTURE_BRIGHTNESS_100, 0, 0);
+        applyAndRemember(0, FIXTURE_BRIGHTNESS_100, 0, 0);
     }
     else if (a == "blue") {
         Serial.println(C_YLW "[LIGHT] Blue 100%" C_RST);
-        _fixture->setChannels(0, 0, FIXTURE_BRIGHTNESS_100, 0);
+        applyAndRemember(0, 0, FIXTURE_BRIGHTNESS_100, 0);
     }
     else if (a == "white") {
         Serial.println(C_YLW "[LIGHT] White 100%" C_RST);
-        _fixture->setChannels(0, 0, 0, FIXTURE_BRIGHTNESS_100);
+        applyAndRemember(0, 0, 0, FIXTURE_BRIGHTNESS_100);
     }
     else if (a == "full") {
         Serial.println(C_YLW "[LIGHT] Full 100%" C_RST);
-        _fixture->setChannels(FIXTURE_BRIGHTNESS_100, FIXTURE_BRIGHTNESS_100,
-                              FIXTURE_BRIGHTNESS_100, FIXTURE_BRIGHTNESS_100);
+        applyAndRemember(FIXTURE_BRIGHTNESS_100, FIXTURE_BRIGHTNESS_100,
+                         FIXTURE_BRIGHTNESS_100, FIXTURE_BRIGHTNESS_100);
     }
     else if (a == "demo" || a == "test") {
         Serial.println(C_YLW "[LIGHT] Running Demo..." C_RST);
@@ -608,8 +626,8 @@ void SerialConsole::cmdLight(const String& args) {
     }
     else if (a == "grow") {
         Serial.println(C_YLW "[LIGHT] Grow (R70% FR50% B50% W30%)" C_RST);
-        _fixture->setChannels(FIXTURE_BRIGHTNESS_70, FIXTURE_BRIGHTNESS_50,
-                              FIXTURE_BRIGHTNESS_50, FIXTURE_BRIGHTNESS_30);
+        applyAndRemember(FIXTURE_BRIGHTNESS_70, FIXTURE_BRIGHTNESS_50,
+                         FIXTURE_BRIGHTNESS_50, FIXTURE_BRIGHTNESS_30);
     }
     else if (a == "status" || a == "") {
         Serial.println(C_BLD C_CYN "  Light Status" C_RST);
@@ -648,7 +666,7 @@ void SerialConsole::cmdLight(const String& args) {
         
         Serial.printf(C_YLW "[LIGHT] Set: R=%d FR=%d B=%d W=%d (%.1f%% %.1f%% %.1f%% %.1f%%)" C_RST "\n",
                       r, fr, b, w, r*0.5, fr*0.5, b*0.5, w*0.5);
-        _fixture->setChannels(r, fr, b, w);
+        applyAndRemember((uint8_t)r, (uint8_t)fr, (uint8_t)b, (uint8_t)w);
     }
     else if (a == "help") {
         Serial.println(C_BLD C_CYN "  Light Commands" C_RST);
@@ -758,7 +776,7 @@ void SerialConsole::cmdHelp() {
     Serial.println();
     
     Serial.println(C_BLD C_WHT "📊 Information:" C_RST);
-    Serial.println("  " C_YLW "status" C_RST "   Show system status (WiFi, BLE, Mesh, sensors, AI)");
+    Serial.println("  " C_YLW "status" C_RST "   Show system status (WiFi, BLE, Mesh, sensors)");
     Serial.println("  " C_YLW "sensors" C_RST "  Show cached sensor readings (or: " C_YLW "d" C_RST ")");
     Serial.println("  " C_YLW "read" C_RST "     Force sensor read NOW (or: " C_YLW "r" C_RST ")");
     Serial.println("  " C_YLW "config" C_RST "   Full config dump in JSON");
@@ -833,14 +851,6 @@ void SerialConsole::cmdHelp() {
     Serial.println("  " C_YLW "set sensor_interval <sec>" C_RST "  Sensor print interval (1-3600)");
     Serial.println("  " C_YLW "save" C_RST "               Write config to FLASH");
     Serial.println("  " C_YLW "reboot" C_RST "             Restart ESP32");
-    Serial.println();
-    Serial.flush(); delay(10);
-
-    Serial.println(C_BLD C_WHT "🤖 AI Agent:" C_RST);
-    Serial.println("  " C_YLW "ai chat <text>" C_RST "   Send message to AI");
-    Serial.println("  " C_YLW "ai status" C_RST "        Show AI status / response");
-    Serial.println("  " C_YLW "ai on" C_RST "           Enable AI agent");
-    Serial.println("  " C_YLW "ai off" C_RST "          Disable AI agent");
     Serial.println();
     Serial.flush(); delay(10);
 
@@ -996,36 +1006,8 @@ void SerialConsole::cmdStatus() {
         Serial.println();
     }
 
-    // ═══ AI AGENT ═══════════════════════════════════════
-    if (_cfg) {
-        Serial.println(C_BLD C_WHT "┌─ AI Agent" C_RST);
-        
-        if (_cfg->cfg.ai_enabled) {
-            Serial.printf("│ " C_GRN "✓" C_RST " Enabled\n");
-            static const char* provs[] = {"LM Studio", "Ollama", "OpenAI", "OpenRouter", "Anthropic"};
-            if (_cfg->cfg.ai_provider < 5) {
-                Serial.printf("│   Provider: %s\n", provs[_cfg->cfg.ai_provider]);
-                if (_cfg->cfg.ai_model[0]) {
-                    Serial.printf("│   Model:    %s\n", _cfg->cfg.ai_model);
-                }
-            }
-            if (strlen(_cfg->cfg.ai_tg_token)) {
-                Serial.printf("│   Telegram: " C_GRN "✓" C_RST " Configured\n");
-            }
-        } else {
-            Serial.printf("│ " C_DIM "·" C_RST " Disabled (use 'ai on' to enable)\n");
-        }
-        Serial.println("└");
-        Serial.println();
-    }
-
-    Serial.println(C_BLD C_CYN "╔════════════════════════════════════════════════════╗" C_RST);
-    Serial.println(C_BLD C_CYN "║  Use 'help' for commands  |  'sensors' for data   ║" C_RST);
-    Serial.println(C_BLD C_CYN "╚════════════════════════════════════════════════════╝" C_RST);
-    Serial.println();
-    Serial.flush();
 }
-
+    
 // ─────────────────── sensors ───────────────────
 
 void SerialConsole::cmdSensors() {
@@ -1403,7 +1385,13 @@ void SerialConsole::cmdDim(const String& args) {
             if (fr > 0) fr = (fr + step > 200) ? 200 : fr + step;
             if (b > 0) b = (b + step > 200) ? 200 : b + step;
             if (w > 0) w = (w + step > 200) ? 200 : w + step;
-            _fixture->setChannels(r, fr, b, w);
+            bool ok = _fixture->setChannels(r, fr, b, w);
+            if (ok && _cfg) {
+                _cfg->cfg.fixture.red_brightness = (uint8_t)r;
+                _cfg->cfg.fixture.far_red_brightness = (uint8_t)fr;
+                _cfg->cfg.fixture.blue_brightness = (uint8_t)b;
+                _cfg->cfg.fixture.white_brightness = (uint8_t)w;
+            }
             Serial.printf(C_GRN "  [BRIGHTEN] R=%.0f%% FR=%.0f%% B=%.0f%% W=%.0f%%" C_RST "\n",
                 r*0.5, fr*0.5, b*0.5, w*0.5);
         } else {
@@ -1425,7 +1413,13 @@ void SerialConsole::cmdDim(const String& args) {
             if (fr > 0) fr = (fr < step) ? 0 : fr - step;
             if (b > 0) b = (b < step) ? 0 : b - step;
             if (w > 0) w = (w < step) ? 0 : w - step;
-            _fixture->setChannels(r, fr, b, w);
+            bool ok = _fixture->setChannels(r, fr, b, w);
+            if (ok && _cfg) {
+                _cfg->cfg.fixture.red_brightness = (uint8_t)r;
+                _cfg->cfg.fixture.far_red_brightness = (uint8_t)fr;
+                _cfg->cfg.fixture.blue_brightness = (uint8_t)b;
+                _cfg->cfg.fixture.white_brightness = (uint8_t)w;
+            }
             Serial.printf(C_GRN "  [DARKEN] R=%.0f%% FR=%.0f%% B=%.0f%% W=%.0f%%" C_RST "\n",
                 r*0.5, fr*0.5, b*0.5, w*0.5);
         } else {
@@ -1520,95 +1514,6 @@ void SerialConsole::cmdJson() {
     cmdConfig();
 }
 
-// ─────────────────── AI agent commands ───────────────────
-
-void SerialConsole::cmdAi(const String& args) {
-    if (!_ai) {
-        Serial.println(C_RED "  [AI] Агент не инициализирован" C_RST);
-        return;
-    }
-
-    String sub = args;
-    sub.toLowerCase();
-    int sp = sub.indexOf(' ');
-    String msg = "";
-    if (sp > 0) {
-        msg = args.substring(sp + 1);
-        msg.trim();
-        sub = sub.substring(0, sp);
-    }
-
-    if (sub == "chat") {
-        if (msg.length() == 0) {
-            Serial.println(C_YLW "  Использование: ai chat <сообщение>" C_RST);
-            return;
-        }
-        if (_ai->isProcessing()) {
-            Serial.println(C_YLW "  [AI] Занят — подождите ответа" C_RST);
-            return;
-        }
-        Serial.printf(C_CYN "  [AI] Отправляю: %s" C_RST "\n", msg.c_str());
-        if (_ai->submitMessage(msg.c_str())) {
-            Serial.println(C_GRN "  [AI] Принято. Используйте 'ai status' для получения ответа" C_RST);
-        } else {
-            Serial.println(C_RED "  [AI] Не удалось отправить (агент выключен или занят)" C_RST);
-        }
-
-    } else if (sub == "status") {
-        bool busy = _ai->isProcessing();
-        bool enabled = _cfg && _cfg->cfg.ai_enabled;
-        Serial.println();
-        if (!enabled) {
-            Serial.printf("  Состояние : " C_RED "Выключен" C_RST " (в конфиге)\n");
-            Serial.printf("  Включить  : " C_YLW "ai on" C_RST "\n");
-        } else {
-            Serial.printf("  Статус    : %s\n", busy ? C_YLW "Обработка..." C_RST : C_GRN "Готов" C_RST);
-        }
-        if (enabled && !busy && _ai->responseSeq() > 0) {
-            Serial.printf("  Ответ #%-3u: " C_WHT "%s" C_RST "\n",
-                          (unsigned)_ai->responseSeq(), _ai->lastResponse());
-        }
-
-    } else if (sub == "history") {
-        Serial.println(C_DIM "  [Последний ответ]" C_RST);
-        if (_ai->responseSeq() > 0)
-            Serial.println(_ai->lastResponse());
-        else
-            Serial.println(C_DIM "  (пусто)" C_RST);
-
-    } else if (sub == "clear") {
-        _ai->clearHistory();
-        Serial.println(C_GRN "  [AI] История очищена" C_RST);
-
-    } else if (sub == "on") {
-        if (_cfg) {
-            _cfg->cfg.ai_enabled = true;
-            _cfg->save();
-            Serial.println(C_GRN "  [AI] Включён. Перезагрузите устройство для применения." C_RST);
-        }
-
-    } else if (sub == "off") {
-        if (_cfg) {
-            _cfg->cfg.ai_enabled = false;
-            _cfg->save();
-            Serial.println(C_YLW "  [AI] Выключен. Перезагрузите устройство для применения." C_RST);
-        }
-    
-    } else if (sub == "enable" || sub == "disable") {
-        // Legacy support
-        bool en = (sub == "enable");
-        if (_cfg) {
-            _cfg->cfg.ai_enabled = en;
-            _cfg->save();
-            Serial.println(en ? C_GRN "  [AI] Включён. Перезагрузите устройство для применения." C_RST 
-                           : C_YLW "  [AI] Выключен. Перезагрузите устройство для применения." C_RST);
-        }
-
-    } else {
-        Serial.println(C_YLW "  Команды: ai chat <текст> | ai status | ai history | ai clear | ai on | ai off" C_RST);
-    }
-}
-
 // ─────────────────── banner / helpers ───────────────────
 
 void SerialConsole::printBanner() {
@@ -1618,8 +1523,14 @@ void SerialConsole::printBanner() {
     Serial.println(C_BLD C_CYN "╠═══════════════════════════════════════════╣" C_RST);
         String ap = (_wifi) ? _wifi->apIP() : String("192.168.4.1");
         if (ap.length() == 0) ap = "192.168.4.1";
+        const char* apName = "ESP-HUB";
+        if (_cfg) {
+            apName = (_cfg->cfg.mesh_enabled && strlen(_cfg->cfg.mesh_ssid) > 0)
+                ? _cfg->cfg.mesh_ssid
+                : _cfg->cfg.ap_ssid;
+        }
         Serial.printf(C_DIM "║  Web UI: " C_WHT "http://%s/ " C_DIM " (AP: %s)" C_DIM "  ║\n" C_RST,
-            ap.c_str(), _cfg ? _cfg->cfg.ap_ssid : "ESP-HUB");
+            ap.c_str(), apName);
     if (_wifi && _wifi->isConnected())
         Serial.printf(C_DIM "║         " C_WHT "http://%s/ " C_DIM "                   ║\n" C_RST, _wifi->localIP().c_str());
     else

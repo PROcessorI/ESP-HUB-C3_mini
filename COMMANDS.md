@@ -46,7 +46,7 @@ while True:
 
 ## Информация о системе
 ```
-status / s      Полное состояние системы (WiFi, BLE, датчики, ИИ)
+status / s      Полное состояние системы (WiFi, BLE, датчики)
 sensors / d     Последние показания датчиков (кэшировано)
 read / r        Прочитать датчики ЧИМ + показать значения
 config / cfg    Полный дамп конфигурации (JSON)
@@ -143,8 +143,6 @@ rtc status              Статус RTC (Real Time Clock)
   set mqtt <хост> [порт]      MQTT брокер и порт (default: 1883)
   set ble <on|off> [имя]      Включить/выключить BLE, опционально имя
   set cpu <80|160|240>        Частота CPU (МГц)
-  set ai <provider> <host> [port]   Конфигурация ИИ агента
-                                    Providers: lm-studio, ollama, openai, openrouter, anthropic
 
 Сохранение и перезагрузка:
   save                    Сохранить конфигурацию во FLASH
@@ -167,21 +165,6 @@ rtc status              Статус RTC (Real Time Clock)
   gpio 5 read             → Показать уровень на GPIO 5
   gpio 23 1               → Поднять GPIO 23 высоко (5V)
   gpio 32 adc             → Прочитать напряжение на GPIO 32
-```
-
-## ИИ Агент
-```
-Диалог с ИИ:
-  ai chat <текст>         Отправить сообщение агенту
-  ai status               Статус: готов / обработка
-  ai history              Показать последний ответ
-  ai clear                Очистить историю
-
-Управление:
-  ai on                   Включить агента (требует перезагрузку)
-  ai off                  Выключить агента (требует перезагрузку)
-  ai enable               (старое имя команды, использовать ai on)
-  ai disable              (старое имя команды, использовать ai off)
 ```
 
 ## Мониторинг и автоматизация
@@ -252,23 +235,6 @@ monitor         Continuous read every 2s (press Enter to stop)
 reboot / restart / rst      Restart ESP32
 mqtt <host|port|interval|status>  MQTT configuration
 help / ?                    Show this help
-```
-
-## AI Agent команды
-```
-ai status                   Show AI agent status (enabled/disabled, current model)
-ai on                       Enable AI agent (requires reboot to take effect)
-ai off                      Disable AI agent (requires reboot to take effect)
-ai clear                    Clear chat history
-
-ai ask <message>            Send message to AI (short form)
-ai <message>                Same as above (quick chat)
-ai poll                     Check current AI response status
-
-Примеры:
-ai ask Какой сейчас статус системы?
-ai Включи светильник красным светом
-ai clear                    Очистить историю переговоров
 ```
 
 ---
@@ -379,19 +345,6 @@ print(f"Light: R={status['red']}, B={status['blue']}")
 # Включить GPIO
 requests.post('http://192.168.1.100/api/gpio/set', 
               data={'pin': 12, 'value': 1})
-
-# AI Agent — отправить сообщение
-response = requests.post('http://192.168.1.100/api/ai/chat', 
-                        json={'message': 'Какой сейчас статус?'})
-print(response.json())  # {'queued': true}
-
-# Получить ответ от AI
-status = requests.get('http://192.168.1.100/api/ai/status').json()
-print(f"Processing: {status['processing']}")
-print(f"Response: {status['response']}")
-
-# Очистить историю чата
-requests.post('http://192.168.1.100/api/ai/history/clear')
 ```
 
 ### Полная справка по API
@@ -402,7 +355,6 @@ requests.post('http://192.168.1.100/api/ai/history/clear')
 - Примеры для cURL, JavaScript, Python
 - Сценарии и таймеры светильника
 - GPIO таймеры и автоматизация
-- AI Agent API (chat, status, history, LM Studio)
 
 ---
 

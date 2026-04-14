@@ -165,7 +165,7 @@ struct FixtureConfig {
     uint8_t  blue_brightness  = 0;      // 0-200
     uint8_t  white_brightness = 0;      // 0-200
     uint8_t  uart_tx_pin      = 4;      // UART1 TX pin (ESP32-C3: GPIO4)
-    uint8_t  uart_rx_pin      = 5;      // UART1 RX pin (ESP32-C3: GPIO5)
+    uint8_t  uart_rx_pin      = 3;      // UART1 RX pin (ESP32-C3: GPIO3)
     uint32_t uart_baud        = 9600;   // UART baud rate
     
     // Сценарии работы по времени:
@@ -217,26 +217,10 @@ struct HubConfig {
     char cam_url[128]      = ""; // Base URL of ESP32-CAM, e.g. http://192.168.1.100
     uint8_t cam_record_dev = 0;  // 0=None 1=SD Card 2=MQTT
 
-    // AI Agent
-    bool     ai_enabled       = false;
-    uint8_t  ai_provider      = 0;      // 0=LM Studio, 1=Ollama, 2=OpenAI, 3=OpenRouter, 4=Anthropic
-    char     ai_lms_url[64]   = "";     // LM Studio base URL, e.g. http://192.168.1.125:1234
-    char     ai_api_url[128]  = "";     // custom endpoint URL (overrides provider default)
-    char     ai_model[64]     = "qwen/qwen3-vl-8b";  // model name (empty = provider default)
-    char     ai_api_key[256]  = "";     // API key (cloud providers)
-    bool     ai_tg_enabled    = false;  // Enable/disable Telegram polling
-    char     ai_tg_token[128] = "";     // Telegram bot token
-    char     ai_tg_chat_id[24]= "";     // allowed Telegram chat ID whitelist
-    uint16_t ai_max_tokens    = 1024;   // max tokens in LLM response
-    uint16_t ai_ctx_size      = 20000;  // context window (local models only)
-    uint8_t  ai_temperature   = 70;     // 0-100 → 0.0-1.0 (70 = 0.7)
-    uint8_t  ai_tool_rounds   = 5;      // max tool-call iterations per request
-    char     ai_sys_prompt[256] = "";   // system prompt override (empty = built-in default)
-
     // Rate Limiter
     bool     rl_enabled   = false;
-    uint16_t rl_max_hour  = 0;        // max AI requests per hour (0 = unlimited)
-    uint16_t rl_max_day   = 0;       // max AI requests per day  (0 = unlimited)
+    uint16_t rl_max_hour  = 0;        // max requests per hour (0 = unlimited)
+    uint16_t rl_max_day   = 0;        // max requests per day  (0 = unlimited)
 
     // CRON scheduler
     bool cron_enabled = true;

@@ -67,13 +67,17 @@ private:
     const char* _staSSID = nullptr;
     const char* _staPass = nullptr;
     uint32_t    _lastRetry = 0;
+    uint8_t     _noApFoundStreak = 0;
+    uint32_t    _retryBlockedUntil = 0;
 
     void startAP();
     void enableNAT();           // Enable IP forwarding + fix DNS for AP clients
+    void ensureNaptInitialized();
     void restoreCaptivePortal(); // Restore captive DNS after STA disconnect
     void reconcileApInterface(); // Handle AP IP changes (e.g. when mesh reconfigures SoftAP)
     bool _natEnabled = false;
     bool _apNatConfig = false;
+    bool _naptInitialized = false;
 public:
     bool isNatEnabled() const { return _natEnabled; }
 private:

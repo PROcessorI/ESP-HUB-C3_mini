@@ -135,22 +135,6 @@ bool ConfigManager::load() {
     strlcpy(cfg.cam_url, doc["cam_url"] | "", sizeof(cfg.cam_url));
     cfg.cam_record_dev = doc["cam_rec"] | 0;
 
-    // AI Agent
-    cfg.ai_enabled   = doc["ai_en"]     | false;
-    cfg.ai_provider  = doc["ai_prov"]   | 0;
-    strlcpy(cfg.ai_lms_url,    doc["ai_lms"]    | "", sizeof(cfg.ai_lms_url));
-    strlcpy(cfg.ai_api_url,    doc["ai_url"]    | "", sizeof(cfg.ai_api_url));
-    strlcpy(cfg.ai_model,      doc["ai_model"]  | "qwen/qwen3-vl-8b", sizeof(cfg.ai_model));
-    strlcpy(cfg.ai_api_key,    doc["ai_key"]    | "", sizeof(cfg.ai_api_key));
-    cfg.ai_tg_enabled = doc["ai_tg_en"]   | false;
-    strlcpy(cfg.ai_tg_token,   doc["ai_tg_tok"] | "", sizeof(cfg.ai_tg_token));
-    strlcpy(cfg.ai_tg_chat_id, doc["ai_tg_cid"] | "", sizeof(cfg.ai_tg_chat_id));
-    strlcpy(cfg.ai_sys_prompt, doc["ai_sysprompt"] | "", sizeof(cfg.ai_sys_prompt));
-    cfg.ai_max_tokens  = doc["ai_maxtok"]  | 1024;
-    cfg.ai_ctx_size    = doc["ai_ctx"]     | 20000;
-    cfg.ai_temperature = doc["ai_temp"]    | 70;
-    cfg.ai_tool_rounds = doc["ai_rounds"]  | 5;
-
     // Rate Limiter
     cfg.rl_enabled  = doc["rl_en"]     | false;
     cfg.rl_max_hour = doc["rl_maxhr"]  | 20;
@@ -207,8 +191,13 @@ bool ConfigManager::load() {
     cfg.fixture.blue_brightness    = fix["blue"] | 0;
     cfg.fixture.white_brightness   = fix["white"] | 0;
     cfg.fixture.uart_tx_pin        = fix["tx"] | 4;   // ESP32-C3: GPIO4
-    cfg.fixture.uart_rx_pin        = fix["rx"] | 5;   // ESP32-C3: GPIO5
+    cfg.fixture.uart_rx_pin        = fix["rx"] | 3;   // ESP32-C3: GPIO3
     cfg.fixture.uart_baud          = fix["baud"] | 9600UL;
+
+    // Migrate legacy default wiring TX=4/RX=5 -> TX=4/RX=3 for ESP32-C3 Super Mini.
+    if (cfg.fixture.uart_tx_pin == 4 && cfg.fixture.uart_rx_pin == 5) {
+        cfg.fixture.uart_rx_pin = 3;
+    }
 
     JsonArray scarr = fix["scenarios"].as<JsonArray>();
     for (int i = 0; i < MAX_FIXTURE_SCENARIOS; i++) {
@@ -285,20 +274,6 @@ bool ConfigManager::save() {
     doc["serial_baud"]  = cfg.serial_baud;
     doc["cam_url"]      = cfg.cam_url;
     doc["cam_rec"]      = cfg.cam_record_dev;
-    doc["ai_en"]        = cfg.ai_enabled;
-    doc["ai_prov"]      = cfg.ai_provider;
-    doc["ai_lms"]       = cfg.ai_lms_url;
-    doc["ai_url"]       = cfg.ai_api_url;
-    doc["ai_model"]     = cfg.ai_model;
-    doc["ai_key"]       = cfg.ai_api_key;
-    doc["ai_tg_en"]     = cfg.ai_tg_enabled;
-    doc["ai_tg_tok"]    = cfg.ai_tg_token;
-    doc["ai_tg_cid"]    = cfg.ai_tg_chat_id;
-    doc["ai_sysprompt"] = cfg.ai_sys_prompt;
-    doc["ai_maxtok"]    = cfg.ai_max_tokens;
-    doc["ai_ctx"]       = cfg.ai_ctx_size;
-    doc["ai_temp"]      = cfg.ai_temperature;
-    doc["ai_rounds"]    = cfg.ai_tool_rounds;
 
     // Rate Limiter
     doc["rl_en"]     = cfg.rl_enabled;

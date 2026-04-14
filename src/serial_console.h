@@ -18,10 +18,9 @@
 #include "ble_manager.h"
 #include "fixture_manager.h"
 #include "system_clock.h"
-#include "ai_agent.h"
 #include "mesh_manager.h"
 
-#define SC_ANSI 1          // 1 = ANSI-цвета включены (PuTTY/VS Code Monitor)
+#define SC_ANSI 0          // 1 = ANSI-цвета включены (PuTTY/VS Code Monitor)
                            // 0 = чистый текст (Arduino Serial Monitor)
 
 class SerialConsole {
@@ -31,7 +30,6 @@ public:
                SensorManager* sensors,
                BLEManager*    ble,
                FixtureManager* fixture = nullptr,
-               AiAgent*       ai      = nullptr,
                MeshManager*   mesh    = nullptr);
 
     // Call in loop() — reads Serial and processes commands
@@ -46,7 +44,6 @@ private:
     SensorManager*  _sensors = nullptr;
     BLEManager*     _ble     = nullptr;
     FixtureManager* _fixture = nullptr;
-    AiAgent*        _ai      = nullptr;
     MeshManager*    _mesh    = nullptr;
 
     String   _buf;        // line accumulation buffer
@@ -77,7 +74,6 @@ private:
     void cmdMqtt(const String& args);   // mqtt host|port|interval|status
     void cmdJson();                     // json — show full config as JSON
     void cmdReboot();
-    void cmdAi(const String& args);  // ai chat|status|enable|disable|history|clear
 
     // Auto-read state
     uint16_t _autoSec  = 0;     // 0 = disabled

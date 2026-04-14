@@ -2,14 +2,14 @@
 // ============== Fixture Manager (Управление светильниками) ==============
 // ESP32-C3 UART управление Inventronics NSM-1k2q200mg (4 канала)
 // Протокол: Digital Dimming Vm1.0
-// UART1: 9600 baud, 8N1, TX=GPIO4, RX=GPIO5
+// UART1: 9600 baud, 8N1, TX=GPIO4, RX=GPIO3
 // Каналы: CH1=Red, CH2=FarRed, CH3=Blue, CH4=White
 
 #include <Arduino.h>
 #include "config.h"
 
 #define FIXTURE_TX_PIN 4     // ESP32-C3: GPIO4
-#define FIXTURE_RX_PIN 5     // ESP32-C3: GPIO5
+#define FIXTURE_RX_PIN 3     // ESP32-C3: GPIO3
 #define FIXTURE_BAUD 9600
 
 // --- Константы протокола ---

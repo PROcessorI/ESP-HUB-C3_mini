@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
+#include <esp_log.h>
 
 #include "config.h"
 #include "wifi_manager.h"
@@ -20,7 +21,6 @@
 #include "serial_console.h"
 #include "fixture_manager.h"
 #include "system_clock.h"
-#include "ai_agent.h"
 #include "cron_manager.h"
 #include "rate_limiter.h"
 #include "mesh_manager.h"
@@ -142,6 +142,10 @@ void setup() {
     Serial.begin(115200);
     delay(500);
 
+    // Keep system network logs concise so serial console input stays readable.
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("esp_netif_handlers", ESP_LOG_WARN);
+
     // 1. Загрузка конфигурации из LittleFS (сохранённые настройки)
     configMgr.begin();
 
@@ -224,9 +228,28 @@ void setup() {
     // 6. Запуск WiFi (AP + STA режимы)
     // Если BLE включён — WiFi должен использовать modem sleep (WIFI_PS_MIN_MODEM)
     wifiMgr.setBluetoothCoex(configMgr.cfg.ble_enabled);
-    wifiMgr.begin(configMgr.cfg.wifi_ssid, configMgr.cfg.wifi_pass,
-                  configMgr.cfg.ap_ssid, configMgr.cfg.ap_pass,
-                  configMgr.cfg.ap_nat);
+
+    const char* staSsid = configMgr.cfg.wifi_ssid;
+    const char* staPass = configMgr.cfg.wifi_pass;
+    const char* apSsid = configMgr.cfg.ap_ssid;
+    const char* apPass = configMgr.cfg.ap_pass;
+    bool useApNat = configMgr.cfg.ap_nat;
+    if (configMgr.cfg.mesh_enabled) {
+        // In mesh mode, replace the regular ESP-HUB hotspot with mesh SSID.
+        if (strlen(configMgr.cfg.mesh_ssid) > 0) apSsid = configMgr.cfg.mesh_ssid;
+        if (strlen(configMgr.cfg.mesh_pass) >= 8) apPass = configMgr.cfg.mesh_pass;
+        // ESP32-C3 + painlessMesh is unstable with concurrent STA reconnect loops.
+        // Keep WiFi in AP role for mesh and web portal stability.
+        staSsid = "";
+        staPass = "";
+        useApNat = false;
+        Serial.printf("[WIFI] Mesh AP mode: SSID='%s'\n", apSsid);
+        Serial.println(F("[WIFI] Mesh mode: STA uplink disabled for radio stability"));
+    }
+
+    wifiMgr.begin(staSsid, staPass,
+                  apSsid, apPass,
+                  useApNat);
 
     // ВАЖНО: НЕ ждём здесь подключение WiFi! Это замораживает систему на 16 сек.
     // Вместо этого пускаем инициализацию сразу, WiFi подключится в фоне через loop()
@@ -280,7 +303,7 @@ void setup() {
     }
 
      // 11. Serial консоль — доступ к интерфейсу через USB-кабель и Mesh
-     serialCon.begin(&configMgr, &wifiMgr, &sensorMgr, &bleMgr, &fixtureMgr, &aiAgent, &meshMgr);
+    serialCon.begin(&configMgr, &wifiMgr, &sensorMgr, &bleMgr, &fixtureMgr, &meshMgr);
 
      // 12. Initialize Mesh Network (if enabled)
      if (configMgr.cfg.mesh_enabled) {
@@ -306,12 +329,7 @@ void setup() {
             cronMgr.setTimezone(configMgr.cfg.cron_tz);
     }
 
-    // 14. AI Agent — LLM с поддержкой инструментов
-    if (configMgr.cfg.ai_enabled) {
-        aiAgent.begin(&configMgr, &sensorMgr, &fixtureMgr, &gpioSched, &mqttClient);
-    }
-
-    // Start CRON task after AI agent is initialised
+    // Start CRON background task
     if (configMgr.cfg.cron_enabled) cronMgr.startTask();
 
     Serial.println(F("\n[MAIN] Инициализация завершена!"));
@@ -351,14 +369,12 @@ void loop() {
     // Обновление MQTT (отправка телеметрии)
     mqttClient.tick();
 
-    // AI Agent tick (Telegram polling wakeup)
-    // Poll CRON for any fired actions → submit to AI agent
+    // Poll CRON for any fired actions and execute via serial command parser.
     {
         static char _cronAction[CRON_ACTION_LEN];
         if (cronMgr.pollFired(_cronAction, sizeof(_cronAction)))
-            aiAgent.submitMessage(_cronAction);
+            serialCon.executeCommand(String(_cronAction));
     }
-    aiAgent.tick();
 
     // Periodic sensor reading
     if (millis() - lastSensorRead >= sensorReadInterval) {

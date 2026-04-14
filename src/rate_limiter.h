@@ -1,6 +1,6 @@
 #pragma once
 // ============== Rate Limiter ==============
-// Sliding-window hourly / daily request counter for the AI agent.
+// Sliding-window hourly / daily request counter.
 // Persists daily count to /ratelimit.json on LittleFS.
 
 #include <Arduino.h>
@@ -14,7 +14,7 @@ public:
     // On denial, writes human-readable reason to reason[reasonLen].
     bool check(char* reason, size_t reasonLen);
 
-    // Record that a request was made (call after successful LLM call)
+    // Record that a request was made after a successful operation.
     void recordRequest();
 
     // Manual reset
