@@ -74,6 +74,7 @@ void RateLimiter::persist() {
 }
 
 void RateLimiter::load() {
+    if (!LittleFS.exists(RL_JSON_PATH)) return;
     File f = LittleFS.open(RL_JSON_PATH, "r");
     if (!f) return;
     JsonDocument doc;

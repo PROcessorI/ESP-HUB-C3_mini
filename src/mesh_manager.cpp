@@ -27,6 +27,12 @@ void MeshManager::begin(const char* prefix, const char* password, uint16_t port,
 
     const char* meshPrefix = (prefix && prefix[0]) ? prefix : "ESP-HUB-MESH";
     const char* meshPass = (password && password[0]) ? password : "1234567890";
+    size_t meshPassLen = strlen(meshPass);
+    if (meshPassLen < 8 || meshPassLen > 63) {
+        Serial.printf("[MESH] Invalid password length=%u, fallback to default key\n", (unsigned)meshPassLen);
+        meshPass = "1234567890";
+        meshPassLen = strlen(meshPass);
+    }
     uint16_t meshPort = (port > 0) ? port : 5555;
     uint8_t meshChannel = (channel >= 1 && channel <= 13) ? channel : 6;
 
@@ -51,8 +57,17 @@ void MeshManager::begin(const char* prefix, const char* password, uint16_t port,
 
     // Initialize mesh network
     mesh.setDebugMsgTypes(ERROR | STARTUP);  // Set before init() so that you can see startup messages
-    
-    mesh.init(meshPrefix, meshPass, userSched, meshPort, WIFI_AP_STA, meshChannel);
+
+    // Explicitly keep SSID visible and allow a practical number of clients.
+    mesh.init(meshPrefix, meshPass, userSched, meshPort, WIFI_AP_STA, meshChannel, 0, 8);
+
+    // Some C3 builds may race SoftAP startup during mode switch. Recover once if needed.
+    delay(120);
+    if (WiFi.softAPSSID().length() == 0) {
+        bool apRecovered = WiFi.softAP(meshPrefix, meshPass, meshChannel, 0, 8);
+        Serial.printf("[MESH] SoftAP recovery attempt: %s\n", apRecovered ? "OK" : "FAILED");
+    }
+
     mesh.onReceive(&receivedCallback);
     mesh.onNewConnection(&newConnectionCallback);
     mesh.onChangedConnections(&changedConnectionCallback);
@@ -62,6 +77,9 @@ void MeshManager::begin(const char* prefix, const char* password, uint16_t port,
     
     Serial.println("[MESH] Mesh network initialized");
     Serial.printf("[MESH] SSID: %s, Port: %u, Channel: %u\n", meshPrefix, (unsigned)meshPort, (unsigned)meshChannel);
+    Serial.printf("[MESH] AP SSID(actual): %s\n", WiFi.softAPSSID().c_str());
+    Serial.printf("[MESH] AP channel(actual): %u\n", (unsigned)WiFi.channel());
+    Serial.printf("[MESH] AP pass len: %u\n", (unsigned)meshPassLen);
     IPAddress apIp = WiFi.softAPIP();
     if (apIp == IPAddress(0, 0, 0, 0)) {
         apIp = WiFi.localIP();

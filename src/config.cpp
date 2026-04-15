@@ -112,6 +112,13 @@ bool ConfigManager::load() {
     strlcpy(cfg.ap_ssid, doc["ap_ssid"] | "ESP-HUB", sizeof(cfg.ap_ssid));
     strlcpy(cfg.ap_pass, doc["ap_pass"] | "12345678", sizeof(cfg.ap_pass));
     cfg.ap_nat = doc["ap_nat"] | false;
+    {
+        size_t apPassLen = strlen(cfg.ap_pass);
+        if (apPassLen > 0 && apPassLen < 8) {
+            Serial.printf("[CFG] AP password too short (%u), fallback to default\n", (unsigned)apPassLen);
+            strlcpy(cfg.ap_pass, "12345678", sizeof(cfg.ap_pass));
+        }
+    }
 
     // Device
     strlcpy(cfg.device_name, doc["device_name"] | "ESP-HUB", sizeof(cfg.device_name));
@@ -127,6 +134,18 @@ bool ConfigManager::load() {
     strlcpy(cfg.mesh_pass, doc["mesh_pass"] | "1234567890", sizeof(cfg.mesh_pass));
     cfg.mesh_port = doc["mesh_port"] | 5555;
     cfg.mesh_channel = doc["mesh_ch"] | 6;
+    if (strlen(cfg.mesh_ssid) == 0) {
+        strlcpy(cfg.mesh_ssid, "ESP-HUB-MESH", sizeof(cfg.mesh_ssid));
+    }
+    {
+        size_t meshPassLen = strlen(cfg.mesh_pass);
+        if (meshPassLen < 8 || meshPassLen > 63) {
+            Serial.printf("[CFG] Mesh password length=%u is invalid, fallback to default\n", (unsigned)meshPassLen);
+            strlcpy(cfg.mesh_pass, "1234567890", sizeof(cfg.mesh_pass));
+        }
+    }
+    if (cfg.mesh_port == 0) cfg.mesh_port = 5555;
+    if (cfg.mesh_channel < 1 || cfg.mesh_channel > 13) cfg.mesh_channel = 6;
 
     cfg.cpu_freq_mhz = doc["cpu_freq"] | 240;
     cfg.serial_baud  = doc["serial_baud"] | 115200;
