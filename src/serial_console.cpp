@@ -132,14 +132,14 @@ void SerialConsole::executeCommand(const String& line) {
 void SerialConsole::processLine(const String& line) {
     if (_mesh && _cfg && _cfg->cfg.mesh_enabled && line.length() > 0) {
         String rec = "EXEC LOCAL role=";
-        rec += (_cfg->cfg.mesh_master_node ? "MAIN" : "NODE");
+        rec += "PEER";
         rec += " node=";
         rec += String(_mesh->getNodeId());
         rec += " cmd=";
         rec += line;
         _mesh->addLogEntry(rec);
         Serial.printf("[MESH] EXEC LOCAL role=%s node=%u cmd=%s\n",
-            _cfg->cfg.mesh_master_node ? "MAIN" : "NODE",
+            "PEER",
             (unsigned)_mesh->getNodeId(),
             line.c_str());
     }
@@ -331,7 +331,7 @@ void SerialConsole::cmdMesh(const String& args) {
         bool enabled = _cfg->cfg.mesh_enabled;
         Serial.println(C_BLD C_CYN "  Mesh Status" C_RST);
         Serial.printf("  Config : %s\n", enabled ? C_GRN "ENABLED" C_RST : C_DIM "DISABLED" C_RST);
-        Serial.printf("  Role   : %s\n", _cfg->cfg.mesh_master_node ? C_GRN "MASTER" C_RST : C_DIM "NODE" C_RST);
+        Serial.printf("  Mode   : %s\n", C_GRN "PEER (every node can control)" C_RST);
         if (_mesh && enabled) {
             Serial.printf("  NodeID : 0x%X\n", _mesh->getNodeId());
             Serial.printf("  Peers  : %u\n", (unsigned)_mesh->getConnectedCount());

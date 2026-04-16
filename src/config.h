@@ -207,7 +207,7 @@ struct HubConfig {
 
     // Mesh Network
     bool mesh_enabled  = false;  // Enable/disable painlessMesh
-    bool mesh_master_node = false; // Main node for managing other mesh devices
+    bool mesh_master_node = false; // Deprecated: mesh now runs in peer mode on all nodes
     char mesh_ssid[33] = "ESP-HUB-MESH";
     char mesh_pass[65] = "1234567890";
     uint16_t mesh_port = 5555;

@@ -2028,7 +2028,6 @@ void WebPortal::handleBluetooth() {
 
 void WebPortal::handleMesh() {
     startPage("Mesh");
-    bool staConnected = _wifi && _wifi->isConnected();
 
 #if !MESH_PAINLESS_SUPPORTED
     _server.sendContent(card("Mesh backend",
@@ -2043,11 +2042,7 @@ void WebPortal::handleMesh() {
     sform += inputField("\u041f\u0430\u0440\u043e\u043b\u044c Mesh (8-63 \u0441\u0438\u043c\u0432.)", "mesh_pass", _cfg->cfg.mesh_pass, "password", "1234567890");
     sform += numberField("UDP \u043f\u043e\u0440\u0442", "mesh_port", _cfg->cfg.mesh_port, 1, 65535);
     sform += numberField("Wi-Fi \u043a\u0430\u043d\u0430\u043b", "mesh_ch", _cfg->cfg.mesh_channel, 1, 13);
-    if (!staConnected) {
-        sform += checkboxField("\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0443\u0437\u0435\u043b (\u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0432\u0441\u0435\u043c\u0438 \u0443\u0437\u043b\u0430\u043c\u0438)", "mesh_master", _cfg->cfg.mesh_master_node);
-    } else {
-        sform += F("<p class='text-muted' style='font-size:12px'>\u041f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0430\u0442\u0435\u043b\u044c '\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0443\u0437\u0435\u043b' \u0441\u043a\u0440\u044b\u0442, \u0442\u0430\u043a \u043a\u0430\u043a \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0439 Wi-Fi \u0441\u0435\u0442\u0438.</p>");
-    }
+    sform += F("<p class='text-muted' style='font-size:12px'>\u0420\u0435\u0436\u0438\u043c Mesh: PEER. \u041b\u044e\u0431\u0430\u044f \u043d\u043e\u0434\u0430 \u043c\u043e\u0436\u0435\u0442 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u044b \u0438 \u0443\u043f\u0440\u0430\u0432\u043b\u044f\u0442\u044c \u0441\u0435\u0442\u044c\u044e.</p>");
     sform += F("<p class='text-muted' style='font-size:12px'>\u0414\u043b\u044f \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u0432\u0442\u043e\u0440\u043e\u0433\u043e \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u0430 \u0443\u043a\u0430\u0436\u0438\u0442\u0435 \u0442\u043e\u0447\u043d\u043e \u0442\u0435 \u0436\u0435 SSID, \u043f\u0430\u0440\u043e\u043b\u044c, \u043f\u043e\u0440\u0442 \u0438 \u043a\u0430\u043d\u0430\u043b \u043d\u0430 \u043e\u0431\u043e\u0438\u0445 \u0443\u0437\u043b\u0430\u0445.</p>");
     sform += submitButton("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u043f\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c");
     sform += F("</form>");
@@ -2078,17 +2073,12 @@ void WebPortal::handleMesh() {
 #else
     st += F("--");
 #endif
-    st += F("</div><div class='text-muted' style='margin-top:4px'>Role: ");
-    st += (_cfg->cfg.mesh_master_node ? "MASTER" : "NODE");
+    st += F("</div><div class='text-muted' style='margin-top:4px'>Mode: PEER");
 #if MESH_SUPPORTED
     if (_mesh && meshEnabled) {
         st += F("<br><span style='color:var(--primary); font-weight:bold;'>Mesh AP IP: ");
         st += _mesh->getMeshIP();
         st += F("</span>");
-        
-        if (!_cfg->cfg.mesh_master_node) {
-           st += F("<br><span style='color:#e74c3c; font-size:11px;'>Внимание: Вы подключены к ретранслятору.<br>Для настройки системы подключитесь к MASTER узлу!</span>");
-        }
     }
 #endif
     st += F("</div></div>");
@@ -2130,16 +2120,15 @@ void WebPortal::handleMesh() {
     String nodes;
     nodes += F("<div id='mesh-nodes' style='overflow-x:auto'>"
               "<table style='width:100%;border-collapse:collapse;font-size:13px'>"
-              "<tr><th>Node ID</th><th>\u0421\u0442\u0430\u0442\u0443\u0441</th></tr>");
+              "<tr><th>Node ID</th><th>Web IP</th><th>Control</th><th>Direct IP</th></tr>"
+              "<tbody id='mesh-node-rows'>");
     if (_mesh && meshEnabled) {
-        String nodeList = _mesh->getNodeListJson();
-        nodes += F("<tr><td>\u0423\u0437\u043b\u044b \u0441\u0435\u0442\u0438</td><td>");
-        nodes += nodeList;
-        nodes += F("</td></tr>");
+        nodes += F("<tr><td colspan='4'><span class='text-muted'>Loading...</span></td></tr>");
     } else {
-        nodes += F("<tr><td colspan='2'><span class='text-muted'>\u041c\u0435\u0448 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0430</span></td></tr>");
+        nodes += F("<tr><td colspan='4'><span class='text-muted'>\u041c\u0435\u0448 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0430</span></td></tr>");
     }
-    nodes += F("</table></div>");
+    nodes += F("</tbody></table></div>");
+    nodes += F("<p class='text-muted' style='font-size:12px;margin-top:8px'>Control открывает локальную страницу управления выбранной нодой. Web IP/Direct IP выполняют прямой переход на удалённую ноду (адрес в браузере меняется), но в mesh это может не маршрутизироваться.</p>");
     
     _server.sendContent(card("\u0423\u0437\u043b\u044b \u0441\u0435\u0442\u0438", nodes));
     
@@ -2186,7 +2175,7 @@ void WebPortal::handleMesh() {
 
     tools += F("<label class='mt'>\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u0430\u044f \u043a\u043e\u043c\u0430\u043d\u0434\u0430 (Serial syntax)</label>");
     tools += F("<select id='mesh-cmd-target'><option value='all'>all</option></select>");
-    tools += F("<label class='mt' style='display:flex;align-items:center;gap:8px'><input type='checkbox' id='mesh-run-local' checked><span data-i18n-ru='\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0442\u044c \u043d\u0430 \u0433\u043b\u0430\u0432\u043d\u043e\u043c \u0443\u0437\u043b\u0435' data-i18n-en='Run on main node'>\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0442\u044c \u043d\u0430 \u0433\u043b\u0430\u0432\u043d\u043e\u043c \u0443\u0437\u043b\u0435</span></label>");
+    tools += F("<label class='mt' style='display:flex;align-items:center;gap:8px'><input type='checkbox' id='mesh-run-local' checked><span data-i18n-ru='\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0442\u044c \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u043d\u043e\u0434\u0435' data-i18n-en='Run on this node'>\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0442\u044c \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u043d\u043e\u0434\u0435</span></label>");
     tools += F("<input type='text' id='mesh-cmd-line' placeholder='\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: light red' class='mt'>");
     tools += F("<button class='btn btn-primary mt' onclick='meshSendCmd()' data-i18n-ru='\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443' data-i18n-en='Run command'>\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443</button>");
 
@@ -2250,11 +2239,35 @@ void WebPortal::handleMesh() {
         "function updateMeshTargetSelect(id,nodes){"
         "  var sel=document.getElementById(id);if(!sel)return;"
         "  var prev=sel.value||'all';"
+        "  var preferred=(window.__meshTargetPref||'').trim();"
         "  var opts='<option value=\"all\">all</option>';"
         "  (nodes||[]).forEach(function(n){opts+='<option value=\"node:'+n+'\">node:'+n+'</option>';});"
         "  sel.innerHTML=opts;"
+        "  if(preferred && preferred.indexOf('node:')===0){"
+        "    sel.value=preferred;"
+        "    if(sel.value===preferred) return;"
+        "  }"
         "  sel.value=prev;"
         "  if(sel.value!==prev) sel.value='all';"
+        "}"
+        "function meshRenderNodes(nodeWeb,selfId){"
+        "  var body=document.getElementById('mesh-node-rows');"
+        "  if(!body) return;"
+        "  var list=(nodeWeb||[]).slice();"
+        "  if(!list.length){"
+        "    body.innerHTML='<tr><td colspan=\"4\"><span class=\"text-muted\">No connected nodes</span></td></tr>';"
+        "    return;"
+        "  }"
+        "  body.innerHTML=list.map(function(it){"
+        "    var id=(Number(it.id)>>>0);"
+        "    var ip=it.ip||'';"
+        "    var target='node:'+id;"
+        "    var panel='/mesh?target='+encodeURIComponent(target);"
+        "    var direct=it.url||('http://'+ip+'/mesh');"
+        "    var isSelf=(id===((Number(selfId)||0)>>>0));"
+        "    var label=isSelf?' (this)':'';"
+        "    return '<tr><td>node:'+id+label+'</td><td><a href=\"'+direct+'\">'+ip+'</a></td><td><a class=\"btn btn-secondary\" style=\"padding:4px 8px;font-size:12px\" href=\"'+panel+'\">Control</a></td><td><a class=\"btn btn-secondary\" style=\"padding:4px 8px;font-size:12px\" href=\"'+direct+'\">Direct</a></td></tr>';"
+        "  }).join('');"
         "}"
         "function meshLang(){return localStorage.getItem('lang')||'ru';}"
         "function meshApplyI18n(){"
@@ -2277,7 +2290,7 @@ void WebPortal::handleMesh() {
         "    txt+='- mesh chat node:123456 hello\\n';"
         "    txt+='- mesh cmd light red\\n';"
         "    txt+='- mesh cmd node:123456 timer enable 0\\n';"
-        "    txt+='Note: with target=all and switch ON, command executes on main node too.';"
+        "    txt+='Note: with target=all and switch ON, command executes on this node too.';"
         "  } else {"
         "    txt+='\u041a\u0440\u0430\u0442\u043a\u0430\u044f \u0441\u043f\u0440\u0430\u0432\u043a\u0430 \u043f\u043e \u043a\u043e\u043c\u0430\u043d\u0434\u0430\u043c\\n';"
         "    txt+='1) Mesh: mesh status | mesh nodes | mesh log\\n';"
@@ -2288,7 +2301,7 @@ void WebPortal::handleMesh() {
         "    txt+='- mesh chat node:123456 \u041f\u0440\u0438\u0432\u0435\u0442\\n';"
         "    txt+='- mesh cmd light red\\n';"
         "    txt+='- mesh cmd node:123456 timer enable 0\\n';"
-        "    txt+='\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435: при target=all и включенном переключателе команда выполняется и на главном узле.';"
+        "    txt+='\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435: при target=all и включенном переключателе команда выполняется и на текущей ноде.';"
         "  }"
         "  var el=document.getElementById('mesh-help-content');"
         "  if(el) el.textContent=txt;"
@@ -2310,8 +2323,14 @@ void WebPortal::handleMesh() {
         "}"
         "function updateMeshStatus(){"
         "  fetch('/api/mesh').then(r=>r.json()).then(d=>{"
+        "    var p=(window.__meshTargetPref||'').trim();"
+        "    if(p && (!d.nodes || d.nodes.indexOf(Number((p.split(':')[1]||0)))===-1)) window.__meshTargetPref='';"
         "    updateMeshTargetSelect('mesh-chat-target',d.nodes||[]);"
         "    updateMeshTargetSelect('mesh-cmd-target',d.nodes||[]);"
+        "    meshRenderNodes(d.nodeWeb||[], d.nodeId||0);"
+        "    var runLocal=document.getElementById('mesh-run-local');"
+        "    var cmdSel=document.getElementById('mesh-cmd-target');"
+        "    if(runLocal && cmdSel && cmdSel.value!=='all') runLocal.checked=false;"
         "    meshApplyI18n();"
         "    meshRenderHelp();"
         "    meshUpdateBrightnessLabel();"
@@ -2395,6 +2414,13 @@ void WebPortal::handleMesh() {
         "  meshPost('/api/mesh/log/clear','').then(()=>meshRefreshLog());"
         "}"
         "(function(){var s=document.getElementById('mesh-light-br');if(s)s.addEventListener('input',meshUpdateBrightnessLabel);})();"
+        "(function(){"
+        "  try{"
+        "    var q=new URLSearchParams(window.location.search);"
+        "    var t=(q.get('target')||'').trim();"
+        "    if(t.indexOf('node:')===0) window.__meshTargetPref=t;"
+        "  }catch(e){}"
+        "})();"
         "meshApplyI18n();"
         "meshRenderHelp();"
         "meshUpdateBrightnessLabel();"
@@ -2417,8 +2443,8 @@ void WebPortal::handleApiMeshStatus() {
 #else
     json += "false";
 #endif
-    json += F(",\"master\":");
-    json += _cfg->cfg.mesh_master_node ? "true" : "false";
+    json += F(",\"master\":false");
+    json += F(",\"peerMode\":true");
     json += F(",\"ssid\":\"");
     json += _cfg->cfg.mesh_ssid;
     json += F("\"");
@@ -2426,8 +2452,7 @@ void WebPortal::handleApiMeshStatus() {
     json += _cfg->cfg.mesh_port;
     json += F(",\"channel\":");
     json += _cfg->cfg.mesh_channel;
-    json += F(",\"masterSwitchVisible\":");
-    json += (_wifi && _wifi->isConnected()) ? "false" : "true";
+    json += F(",\"masterSwitchVisible\":false");
     json += F(",\"status\":\"");
 #if MESH_SUPPORTED
     if (_mesh && _cfg->cfg.mesh_enabled) {
@@ -2440,14 +2465,16 @@ void WebPortal::handleApiMeshStatus() {
         json += _mesh->getConnectedCount();
         json += F(",\"nodes\":");
         json += _mesh->getNodeListJson();
+        json += F(",\"nodeWeb\":");
+        json += _mesh->getNodeWebListJson(true);
     } else {
-        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[]");
+        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
     }
 #else
     if (_cfg->cfg.mesh_enabled) {
-        json += F("unsupported\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[]");
+        json += F("unsupported\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
     } else {
-        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[]");
+        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
     }
 #endif
     json += "}";
@@ -2517,7 +2544,7 @@ void WebPortal::handleApiMeshSendCmd() {
     uint32_t myNode = _mesh->getNodeId();
     String selfTarget = String("node:") + String(myNode);
     bool runLocal = runLocalFlag && (target == "all" || target == selfTarget);
-    const char* myRole = _cfg->cfg.mesh_master_node ? "MAIN" : "NODE";
+    const char* myRole = "PEER";
     _mesh->addLogEntry(String("CMD API role=") + myRole + " node=" + String(myNode) + " target=" + target + " run_local=" + (runLocalFlag ? "1" : "0") + " cmd=" + cmd);
 
     if (runLocal) {
@@ -3170,10 +3197,7 @@ void WebPortal::handleSaveMesh() {
         }
     }
 
-    // Master role can only be changed when device is not connected to external Wi-Fi.
-    if (!_wifi || !_wifi->isConnected()) {
-        _cfg->cfg.mesh_master_node = _server.hasArg("mesh_master");
-    }
+    _cfg->cfg.mesh_master_node = false;
     _cfg->save();
     // Restart required to apply Mesh changes
     _server.sendHeader("Location", "/mesh");

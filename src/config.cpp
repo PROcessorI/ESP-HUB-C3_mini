@@ -129,7 +129,8 @@ bool ConfigManager::load() {
 
     // Mesh
     cfg.mesh_enabled = doc["mesh_en"] | false;
-    cfg.mesh_master_node = doc["mesh_master"] | false;
+    // Legacy key retained for backward compatibility; runtime is always peer mode.
+    cfg.mesh_master_node = false;
     strlcpy(cfg.mesh_ssid, doc["mesh_ssid"] | "ESP-HUB-MESH", sizeof(cfg.mesh_ssid));
     strlcpy(cfg.mesh_pass, doc["mesh_pass"] | "1234567890", sizeof(cfg.mesh_pass));
     cfg.mesh_port = doc["mesh_port"] | 5555;
@@ -284,7 +285,7 @@ bool ConfigManager::save() {
     doc["ble_en"]       = cfg.ble_enabled;
     doc["ble_name"]     = cfg.ble_name;
     doc["mesh_en"]      = cfg.mesh_enabled;
-    doc["mesh_master"]  = cfg.mesh_master_node;
+    doc["mesh_master"]  = false;
     doc["mesh_ssid"]    = cfg.mesh_ssid;
     doc["mesh_pass"]    = cfg.mesh_pass;
     doc["mesh_port"]    = cfg.mesh_port;
@@ -399,9 +400,9 @@ void ConfigManager::printConfig() {
                   cfg.wifi_ssid, (int)strlen(cfg.wifi_pass));
     Serial.printf("  MQTT:   %s:%d  topic=%s  interval=%ds\n",
         cfg.mqtt_host, cfg.mqtt_port, cfg.mqtt_topic, cfg.mqtt_interval_s);
-    Serial.printf("  Mesh:   %s  role=%s ssid='%s' pass_len=%d port=%u ch=%u\n",
+    Serial.printf("  Mesh:   %s  mode=%s ssid='%s' pass_len=%d port=%u ch=%u\n",
                   cfg.mesh_enabled ? "ENABLED" : "DISABLED",
-                  cfg.mesh_master_node ? "MASTER" : "NODE",
+                  "PEER",
                   cfg.mesh_ssid,
                   (int)strlen(cfg.mesh_pass),
                   (unsigned)cfg.mesh_port,

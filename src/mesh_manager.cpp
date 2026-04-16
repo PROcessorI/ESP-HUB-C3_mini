@@ -254,9 +254,38 @@ String MeshManager::getNodeListJson() {
     return json;
 }
 
+String MeshManager::getNodeWebListJson(bool includeSelf) {
+    if (!_initialized) return "[]";
+
+    std::list<uint32_t> nodes = mesh.getNodeList(includeSelf);
+    String json = "[";
+    bool first = true;
+    for (uint32_t nodeId : nodes) {
+        IPAddress ip = nodeIdToApIp(nodeId);
+        if (!first) json += ",";
+        json += "{\"id\":";
+        json += nodeId;
+        json += ",\"ip\":\"";
+        json += ip.toString();
+        json += "\",\"url\":\"http://";
+        json += ip.toString();
+        json += "/mesh\"}";
+        first = false;
+    }
+    json += "]";
+    return json;
+}
+
 String MeshManager::getMeshIP() {
     if (!_initialized) return "";
     return mesh.getAPIP().toString();
+}
+
+IPAddress MeshManager::nodeIdToApIp(uint32_t nodeId) {
+    return IPAddress(10,
+                     (uint8_t)((nodeId & 0xFF00) >> 8),
+                     (uint8_t)(nodeId & 0xFF),
+                     1);
 }
 
 String MeshManager::jsonEscape(const String& s) {

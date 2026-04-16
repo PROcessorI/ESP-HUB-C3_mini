@@ -42,6 +42,7 @@ public:
     uint32_t getNodeId();
     uint32_t getConnectedCount();
     String getNodeListJson();
+    String getNodeWebListJson(bool includeSelf = false);
     String getMeshIP();  // Get mesh network IP address
     
     // Set callback for received messages
@@ -67,6 +68,7 @@ private:
     uint8_t _logCount = 0;
 
     static String jsonEscape(const String& s);
+    static IPAddress nodeIdToApIp(uint32_t nodeId);
     void appendLog(const String& line);
     
     // Static instance pointer for callbacks

@@ -62,7 +62,7 @@ static void onMeshMessage(uint32_t from, String &msg) {
         const char* command = doc["cmd"] | "";
         uint32_t cmdId = doc["id"] | 0;
         uint32_t myNode = meshMgr.getNodeId();
-        const char* myRole = configMgr.cfg.mesh_master_node ? "MAIN" : "NODE";
+        const char* myRole = "PEER";
 
         bool targetMatch = (strcmp(target, "all") == 0);
         if (!targetMatch) {
@@ -126,7 +126,7 @@ static void onMeshMessage(uint32_t from, String &msg) {
         uint32_t node = doc["node"] | 0;
         const char* txt = doc["msg"] | "";
         uint32_t myNode = meshMgr.getNodeId();
-        const char* myRole = configMgr.cfg.mesh_master_node ? "MAIN" : "NODE";
+        const char* myRole = "PEER";
         meshMgr.addLogEntry(String("ACK RX role=") + myRole + " node=" + String(myNode) + " from=" + String(from) + " src_node=" + String(node) + " id=" + String(id) + " ok=" + (ok ? "1" : "0") + " msg=" + String(txt));
         Serial.printf("[MESH ACK] id=%u node=%u ok=%s msg=%s\n", (unsigned)id, (unsigned)node, ok ? "true" : "false", txt);
         return;
