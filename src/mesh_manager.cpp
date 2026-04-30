@@ -11,6 +11,11 @@ MeshManager::MeshManager() {
     // Constructor
     instance = this;
     userSched = new Scheduler();
+    _lastConnectionCheck = 0;
+    _reconnectAttempts = 0;
+    _channelFixed = false;
+    _fixedChannel = 6;
+    _lastNodeCount = 0;
 }
 
 MeshManager::~MeshManager() {
@@ -25,74 +30,102 @@ MeshManager::~MeshManager() {
 void MeshManager::begin(const char* prefix, const char* password, uint16_t port, uint8_t channel) {
     if (_initialized) return;
 
+    // Check available memory before starting mesh
+    if (ESP.getFreeHeap() < 15000) {
+        Serial.println("[MESH] Low memory, skipping init");
+        return;
+    }
+
     const char* meshPrefix = (prefix && prefix[0]) ? prefix : "ESP-HUB-MESH";
     const char* meshPass = (password && password[0]) ? password : "1234567890";
     size_t meshPassLen = strlen(meshPass);
     if (meshPassLen < 8 || meshPassLen > 63) {
-        Serial.printf("[MESH] Invalid password length=%u, fallback to default key\n", (unsigned)meshPassLen);
+        Serial.printf("[MESH] Invalid password length=%u, fallback to default\n", (unsigned)meshPassLen);
         meshPass = "1234567890";
         meshPassLen = strlen(meshPass);
     }
     uint16_t meshPort = (port > 0) ? port : 5555;
     uint8_t meshChannel = (channel >= 1 && channel <= 13) ? channel : 6;
 
-    // Keep mesh on the currently active Wi-Fi channel ONLY if STA is already connected.
-    // Otherwise, we get garbage channels during scan/connecting phases which break the mesh!
-    if (WiFi.status() == WL_CONNECTED) {
-        uint8_t activeChannel = WiFi.channel();
-        if (activeChannel >= 1 && activeChannel <= 13) {
-            if (meshChannel != activeChannel) {
-                Serial.printf("[MESH] WiFi STA connected explicitly on CH %u. Overriding MESH config (%u).\n",
-                              (unsigned)activeChannel,
-                              (unsigned)meshChannel);
-                meshChannel = activeChannel;
-            }
-        }
-    } else {
-        Serial.printf("[MESH] Forcing Wi-Fi to configured MESH CH %u (STA not yet connected)\n", (unsigned)meshChannel);
-        // Force the radio to the configured mesh channel so that early mesh packets go to the right place
-        // even if STA hasn't connected to the home router yet.
-        esp_wifi_set_channel(meshChannel, WIFI_SECOND_CHAN_NONE);
+    // FIXED CHANNEL: Never change during operation!
+    _fixedChannel = meshChannel;
+    _channelFixed = true;
+
+    Serial.printf("[MESH] Starting on CH%u (heap: %d)\n", (unsigned)_fixedChannel, ESP.getFreeHeap());
+
+    // Initialize mesh network with ERROR + STARTUP messages
+    mesh.setDebugMsgTypes(ERROR | STARTUP);
+
+    // Explicitly keep SSID visible and allow max clients for mesh stability
+    // WIFI_AP_STA mode allows both AP and STA simultaneously for mesh
+    mesh.init(meshPrefix, meshPass, userSched, meshPort, WIFI_AP_STA, _fixedChannel, 0, 8);
+
+    // Wait for initialization
+    delay(200);
+
+    // Ensure AP is configured correctly
+    if (WiFi.softAPSSID() != meshPrefix) {
+        WiFi.softAPdisconnect(true);
+        delay(100);
     }
 
-    // Initialize mesh network
-    mesh.setDebugMsgTypes(ERROR | STARTUP);  // Set before init() so that you can see startup messages
-
-    // Explicitly keep SSID visible and allow a practical number of clients.
-    mesh.init(meshPrefix, meshPass, userSched, meshPort, WIFI_AP_STA, meshChannel, 0, 8);
-
-    // Some C3 builds may race SoftAP startup during mode switch. Recover once if needed.
-    delay(120);
+    // Configure AP manually if needed
     if (WiFi.softAPSSID().length() == 0) {
-        bool apRecovered = WiFi.softAP(meshPrefix, meshPass, meshChannel, 0, 8);
-        Serial.printf("[MESH] SoftAP recovery attempt: %s\n", apRecovered ? "OK" : "FAILED");
+        bool apOk = WiFi.softAP(meshPrefix, meshPass, _fixedChannel, 0, 8);
+        Serial.printf("[MESH] SoftAP init: %s\n", apOk ? "OK" : "FAILED");
+        delay(100);
     }
 
+    // Register callbacks
     mesh.onReceive(&receivedCallback);
     mesh.onNewConnection(&newConnectionCallback);
     mesh.onChangedConnections(&changedConnectionCallback);
     mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
 
     _initialized = true;
-    
+    _lastMeshActivity = millis();
+    _reconnectAttempts = 0;
+
     Serial.println("[MESH] Mesh network initialized");
-    Serial.printf("[MESH] SSID: %s, Port: %u, Channel: %u\n", meshPrefix, (unsigned)meshPort, (unsigned)meshChannel);
-    Serial.printf("[MESH] AP SSID(actual): %s\n", WiFi.softAPSSID().c_str());
-    Serial.printf("[MESH] AP channel(actual): %u\n", (unsigned)WiFi.channel());
-    Serial.printf("[MESH] AP pass len: %u\n", (unsigned)meshPassLen);
-    IPAddress apIp = WiFi.softAPIP();
-    if (apIp == IPAddress(0, 0, 0, 0)) {
-        apIp = WiFi.localIP();
-    }
-    Serial.printf("[MESH] AP IP: %s\n", apIp.toString().c_str());
-    Serial.printf("[MESH] Web URL: http://%s/\n", apIp.toString().c_str());
+    Serial.printf("[MESH] SSID: %s, Port: %u, Channel: %u\n", meshPrefix, (unsigned)meshPort, (unsigned)_fixedChannel);
+    Serial.printf("[MESH] AP SSID: %s\n", WiFi.softAPSSID().c_str());
+    Serial.printf("[MESH] AP channel: %u\n", (unsigned)WiFi.channel());
+    Serial.printf("[MESH] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("[MESH] Web: http://%s/\n", WiFi.softAPIP().toString().c_str());
 }
 
 void MeshManager::tick() {
     if (!_initialized) return;
 
-    // Update mesh network
+    // Update mesh network - mesh.update() can occasionally fail, just continue
     mesh.update();
+
+    // Update health every 30 seconds (non-blocking check)
+    uint32_t now = millis();
+    if (now - _lastConnectionCheck >= 30000) {
+        _lastConnectionCheck = now;
+        checkConnectionHealth();
+    }
+}
+
+void MeshManager::checkConnectionHealth() {
+    uint32_t now = millis();
+    uint32_t nodeCount = mesh.getNodeList().size();
+
+    Serial.printf("[MESH] Health: nodes=%u, heap=%d, uptime=%us\n",
+                (unsigned)nodeCount, ESP.getFreeHeap(), (unsigned)(now / 1000));
+
+    // Log connection changes
+    if (nodeCount != _lastNodeCount) {
+        Serial.printf("[MESH] Nodes changed: %u -> %u\n", (unsigned)_lastNodeCount, (unsigned)nodeCount);
+        _lastNodeCount = nodeCount;
+    }
+
+    // If no activity for 5 minutes and no nodes, mesh may be stale but don't reboot - mesh is optional
+    // Just log status
+    if (nodeCount == 0 && (now - _lastMeshActivity) > 300000) {
+        Serial.println("[MESH] No nodes for 5min - this is normal for single-node mesh");
+    }
 }
 
 bool MeshManager::isConnected() {
@@ -110,13 +143,31 @@ void MeshManager::broadcastMessage(String message) {
     if (!_initialized) return;
 
     mesh.sendBroadcast(message);
+    _lastMeshActivity = millis();
     appendLog(String("TX ") + message);
 }
 
 void MeshManager::sendToNode(uint32_t nodeId, const String& message) {
     if (!_initialized) return;
 
-    mesh.sendSingle(nodeId, message);
+    // Update activity on send attempt
+    _lastMeshActivity = millis();
+
+    std::list<uint32_t> nodes = mesh.getNodeList();
+    bool directlyConnected = false;
+    for (uint32_t n : nodes) {
+        if (n == nodeId) {
+            directlyConnected = true;
+            break;
+        }
+    }
+
+    if (directlyConnected) {
+        mesh.sendSingle(nodeId, message);
+    } else {
+        Serial.printf("[MESH] Node %u not directly connected, using broadcast relay\n", (unsigned)nodeId);
+        mesh.sendBroadcast(message);
+    }
     appendLog(String("TX[") + String(nodeId) + "] " + message);
 }
 
@@ -195,8 +246,9 @@ void MeshManager::receivedCallback(uint32_t from, String &msg) {
 
     if (instance) {
         instance->appendLog(String("RX[") + String(from) + "] " + msg);
+        instance->_lastMeshActivity = millis();
     }
-    
+
     // Call user callback if set
     if (instance && instance->userReceiveCallback) {
         instance->userReceiveCallback(from, msg);

@@ -52,12 +52,23 @@ public:
     String getLogJson(uint8_t limit = 20);
     void clearLog();
     void addLogEntry(const String& line);
+
+    // Connection health monitoring
+    void checkConnectionHealth();
     
 private:
     painlessMesh mesh;
     Scheduler* userSched; // Scheduler for mesh tasks (pointer to avoid header bloat)
     bool _initialized = false;
-    
+
+    // Connection monitoring
+    uint8_t _fixedChannel = 6;
+    bool _channelFixed = false;
+    uint32_t _lastConnectionCheck = 0;
+    uint32_t _lastNodeCount = 0;
+    uint8_t _reconnectAttempts = 0;
+    uint32_t _lastMeshActivity = 0;
+
     // Callback storage
     void (*userReceiveCallback)(uint32_t from, String &msg) = nullptr;
 

@@ -13,7 +13,19 @@ static bool isLoopProneMeshCommand(const String& cmd) {
     s.trim();
     s.toLowerCase();
     if (!s.startsWith("mesh ")) return false;
-    return s.startsWith("mesh cmd") || s.startsWith("mesh chat") || s.startsWith("mesh data");
+    // Block ONLY the bare mesh control commands themselves, not user commands containing these words
+    if (s == "mesh" || s == "mesh cmd" || s == "mesh chat" || s == "mesh data" ||
+        s == "mesh status" || s == "mesh on" || s == "mesh off" || s == "mesh nodes" ||
+        s == "mesh log" || s == "mesh clear") {
+        return true;
+    }
+    // Also block commands that start with these bare prefixes (no arguments)
+    if (s.startsWith("mesh cmd ") || s.startsWith("mesh chat ") || s.startsWith("mesh data ") ||
+        s.startsWith("mesh status ") || s.startsWith("mesh on ") || s.startsWith("mesh off ") ||
+        s.startsWith("mesh nodes ") || s.startsWith("mesh log ") || s.startsWith("mesh clear ")) {
+        return true;
+    }
+    return false;
 }
 
 // ================================================================
@@ -2076,9 +2088,9 @@ void WebPortal::handleMesh() {
     st += F("</div><div class='text-muted' style='margin-top:4px'>Mode: PEER");
 #if MESH_SUPPORTED
     if (_mesh && meshEnabled) {
-        st += F("<br><span style='color:var(--primary); font-weight:bold;'>Mesh AP IP: ");
+        st += F("<br><a href='http://");
         st += _mesh->getMeshIP();
-        st += F("</span>");
+        st += F("/' target='_blank' style='color:var(--primary); font-weight:bold;'>Open Web UI</a>");
     }
 #endif
     st += F("</div></div>");
@@ -2132,7 +2144,7 @@ void WebPortal::handleMesh() {
     
     _server.sendContent(card("\u0423\u0437\u043b\u044b \u0441\u0435\u0442\u0438", nodes));
     
-    // Mesh configuration info
+// Mesh configuration info
     String info;
     info += F("<table style='width:100%;border-collapse:collapse;font-size:13px'>");
     info += F("<tr><td style='width:160px'>SSID \u0441\u0435\u0442\u0438</td><td><code>");
@@ -2147,14 +2159,34 @@ void WebPortal::handleMesh() {
     info += F("<tr><td>\u041a\u0430\u043d\u0430\u043b</td><td><code>");
     info += String(_cfg->cfg.mesh_channel);
     info += F("</code></td></tr>");
-    info += F("<tr><td>\u0428\u0438\u0440\u043e\u043a\u043e\u0432\u0435\u0449\u0430\u0442\u0435\u043b\u044c</td><td>");
+    info += F("<tr><td>\u0414\u043e\u0441\u0442\u0443\u043f \u043a Web</td><td><code>");
+#if MESH_SUPPORTED
+    if (_mesh && meshEnabled && _wifi) {
+        info += _wifi->apIP();
+    } else {
+        info += F("--");
+    }
+#else
+    info += F("--");
+#endif
+    info += F("</code></td></tr>");
+    info += F("<tr><td>\u0428\u0438\u0440\u043e\u043a\u043e\u0432\u0435\u0439\u0430\u0442\u0435\u043b\u044c</td><td>");
     if (meshEnabled) {
         info += F("<span class='badge badge-green'>\u0412\u043a\u043b\u044e\u0447\u0435\u043d</span>");
     } else {
-        info += F("<span class='badge badge-blue'>\u0412\u044b\u043a\u043b\u044e\u0447\u0435\u043d</span>");
+        info += F("<span class='badge badge-blue'>\u0412\u044b\u043a\u043b\u043e\u0447\u0435\u043d</span>");
     }
     info += F("</td></tr>");
     info += F("</table>");
+    info += F("<p class='text-muted' style='font-size:12px;margin-top:8px'><b>\u041a\u0430\u043a \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f:</b> \u0441 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u044c\u0441\u044f \u043a Wi-Fi \u0441\u0435\u0442\u0438 ");
+    info += _cfg->cfg.mesh_ssid;
+    info += F(" \u0438 \u043e\u0442\u043a\u0440\u044b\u0442\u044c <code>http://");
+#if MESH_SUPPORTED
+    if (_mesh && meshEnabled && _wifi) {
+        info += _wifi->apIP();
+    }
+#endif
+    info += F("/</code></p>");
     
     _server.sendContent(card("\u041a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044f Mesh", info));
 
@@ -2461,6 +2493,8 @@ void WebPortal::handleApiMeshStatus() {
         json += _mesh->getNodeId();
         json += F(",\"meshIp\":\"");
         json += _mesh->getMeshIP();
+        json += F("\",\"apIp\":\"");
+        json += (_wifi) ? _wifi->apIP() : "";
         json += F("\",\"connectedCount\":");
         json += _mesh->getConnectedCount();
         json += F(",\"nodes\":");
@@ -2468,11 +2502,11 @@ void WebPortal::handleApiMeshStatus() {
         json += F(",\"nodeWeb\":");
         json += _mesh->getNodeWebListJson(true);
     } else {
-        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
+        json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"apIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
     }
 #else
     if (_cfg->cfg.mesh_enabled) {
-        json += F("unsupported\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
+        json += F("unsupported\",\"nodeId\":0,\"meshIp\":\"\",\"apIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
     } else {
         json += F("unavailable\",\"nodeId\":0,\"meshIp\":\"\",\"connectedCount\":0,\"nodes\":[],\"nodeWeb\":[]");
     }

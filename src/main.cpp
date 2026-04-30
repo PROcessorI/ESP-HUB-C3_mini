@@ -44,63 +44,89 @@ static bool isLoopProneMeshCommand(const String& cmd) {
     s.trim();
     s.toLowerCase();
     if (!s.startsWith("mesh ")) return false;
-    return s.startsWith("mesh cmd") || s.startsWith("mesh chat") || s.startsWith("mesh data");
+    // Block ONLY the bare mesh control commands themselves, not user commands containing these words
+    // "mesh cmd", "mesh chat", "mesh data", "mesh status", "mesh on", "mesh off", "mesh nodes"
+    if (s == "mesh" || s == "mesh cmd" || s == "mesh chat" || s == "mesh data" ||
+        s == "mesh status" || s == "mesh on" || s == "mesh off" || s == "mesh nodes" ||
+        s == "mesh log" || s == "mesh clear") {
+        return true;
+    }
+    // Also block commands that start with these bare prefixes (no arguments)
+    if (s.startsWith("mesh cmd ") || s.startsWith("mesh chat ") || s.startsWith("mesh data ") ||
+        s.startsWith("mesh status ") || s.startsWith("mesh on ") || s.startsWith("mesh off ") ||
+        s.startsWith("mesh nodes ") || s.startsWith("mesh log ") || s.startsWith("mesh clear ")) {
+        return true;
+    }
+    return false;
 }
 
 static void onMeshMessage(uint32_t from, String &msg) {
+    // Safety: check for empty message
+    if (msg.length() == 0) {
+        Serial.printf("[MESH] Ignoring empty message from %u\n", from);
+        return;
+    }
+
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, msg);
     if (err) {
-        // Non-JSON payloads are treated as plain messages/chat text.
-        Serial.printf("[MESH] Text from %u: %s\n", from, msg.c_str());
+        Serial.printf("[MESH] Non-JSON from %u: %s\n", from, msg.c_str());
         return;
     }
 
     const char* type = doc["type"] | "";
+    uint32_t myNode = meshMgr.getNodeId();
+    const char* myRole = "PEER";
+
     if (strcmp(type, "cmd") == 0) {
         const char* target = doc["target"] | "all";
         const char* command = doc["cmd"] | "";
         uint32_t cmdId = doc["id"] | 0;
-        uint32_t myNode = meshMgr.getNodeId();
-        const char* myRole = "PEER";
 
         bool targetMatch = (strcmp(target, "all") == 0);
         if (!targetMatch) {
-            String nodeTarget = String("node:") + String(myNode);
+            String nodeTarget = "node:" + String(myNode);
             targetMatch = (strcmp(target, nodeTarget.c_str()) == 0);
         }
 
-        if (!targetMatch || strlen(command) == 0) {
+        if (strlen(command) == 0) {
+            meshMgr.addLogEntry(String("EXEC SKIP role=") + myRole + " node=" + String(myNode) + " from=" + String(from) + " reason=empty_cmd");
+            Serial.printf("[MESH] SKIP empty command from %u\n", from);
+            return;
+        }
+
+        if (!targetMatch) {
+            meshMgr.addLogEntry(String("EXEC SKIP role=") + myRole + " node=" + String(myNode) + " from=" + String(from) + " target=" + String(target) + " reason=target_mismatch");
+            Serial.printf("[MESH] SKIP cmd from %u (target=%s, myNode=%u)\n", from, target, (unsigned)myNode);
             return;
         }
 
         String cmdLine = command;
         cmdLine.trim();
         if (isLoopProneMeshCommand(cmdLine)) {
-            // Prevent broadcast loops from relayed mesh commands.
+            meshMgr.addLogEntry(String("EXEC SKIP role=") + myRole + " node=" + String(myNode) + " from=" + String(from) + " reason=loop_prone");
+            Serial.printf("[MESH] SKIP loop-prone from %u: %s\n", from, cmdLine.c_str());
             return;
         }
 
         meshMgr.addLogEntry(String("EXEC role=") + myRole + " node=" + String(myNode) + " from=" + String(from) + " target=" + String(target) + " cmd=" + cmdLine);
-        Serial.printf("[MESH] EXEC role=%s node=%u from=%u target=%s cmd=%s\n", myRole, (unsigned)myNode, (unsigned)from, target, cmdLine.c_str());
+        Serial.printf("[MESH] EXEC role=%s node=%u from=%u target=%s cmd=%s\n", myRole, (unsigned)myNode, from, target, cmdLine.c_str());
         serialCon.executeCommand(cmdLine);
 
-        String ack = "{\"type\":\"ack\",\"id\":";
-        ack += cmdId;
-        ack += ",\"ok\":true,\"node\":";
-        ack += myNode;
-        ack += ",\"msg\":\"executed\"}";
-        meshMgr.sendToNode(from, ack);
-        meshMgr.addLogEntry(String("ACK TX role=") + myRole + " node=" + String(myNode) + " to=" + String(from) + " id=" + String(cmdId));
+        // Send ACK back to sender
+        if (cmdId > 0) {
+            String ack = "{\"type\":\"ack\",\"id\":" + String(cmdId) + ",\"ok\":true,\"node\":" + String(myNode) + ",\"msg\":\"executed\"}";
+            meshMgr.sendToNode(from, ack);
+            meshMgr.addLogEntry(String("ACK TX node=") + String(myNode) + " to=" + String(from));
+        }
         return;
     }
 
     if (strcmp(type, "chat") == 0) {
         const char* target = doc["target"] | "all";
-        uint32_t myNode = meshMgr.getNodeId();
         bool targetMatch = (strcmp(target, "all") == 0);
         if (!targetMatch) {
-            String nodeTarget = String("node:") + String(myNode);
+            String nodeTarget = "node:" + String(myNode);
             targetMatch = (strcmp(target, nodeTarget.c_str()) == 0);
         }
         if (!targetMatch) {
