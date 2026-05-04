@@ -636,31 +636,31 @@ void WebPortal::handleRoot() {
     String wifiCard;
     wifiCard.reserve(512);
     wifiCard += F("<div class='card'>");
-    wifiCard += F("<h3>📡 WiFi Status</h3>");
+    wifiCard += F("<h3 data-i18n-ru='📡 Статус WiFi' data-i18n-en='📡 WiFi Status'>📡 Статус WiFi</h3>");
     
     if (_wifi->isConnected()) {
-        wifiCard += F("<p><span class='badge badge-green'>Connected</span></p>");
+        wifiCard += F("<p><span class='badge badge-green' data-i18n-ru='Подключено' data-i18n-en='Connected'>Подключено</span></p>");
         wifiCard += F("<p>IP: <b>");
         wifiCard += _wifi->localIP();
         wifiCard += F("</b> | RSSI: ");
         wifiCard += _wifi->rssi();
         wifiCard += F(" dBm</p>");
-        wifiCard += F("<p class='text-muted'>SSID: ");
+        wifiCard += F("<p class='text-muted' data-i18n-ru='SSID:' data-i18n-en='SSID:'>SSID: ");
         wifiCard += _cfg->cfg.wifi_ssid;
         wifiCard += F("</p>");
     } else if (_wifi->isAP()) {
-        wifiCard += F("<p><span class='badge badge-yellow'>AP Mode</span></p>");
+        wifiCard += F("<p><span class='badge badge-yellow' data-i18n-ru='Режим AP' data-i18n-en='AP Mode'>Режим AP</span></p>");
         wifiCard += F("<p>AP IP: <b>");
         wifiCard += _wifi->apIP();
         wifiCard += F("</b></p>");
-        wifiCard += F("<p class='text-muted'>Connect to AP: ");
+        wifiCard += F("<p class='text-muted' data-i18n-ru='Подключиться к AP:' data-i18n-en='Connect to AP:'>Подключиться к AP: ");
         wifiCard += _cfg->cfg.ap_ssid;
         wifiCard += F("</p>");
     } else {
-        wifiCard += F("<p><span class='badge badge-red'>No Connection</span></p>");
+        wifiCard += F("<p><span class='badge badge-red' data-i18n-ru='Нет соединения' data-i18n-en='No Connection'>Нет соединения</span></p>");
     }
     
-    wifiCard += F("<p><a href='/system'>⚙ System Settings</a></p>");
+    wifiCard += F("<p><a href='/system' data-i18n-ru='⚙ Системные настройки' data-i18n-en='⚙ System Settings'>⚙ Системные настройки</a></p>");
     wifiCard += F("</div>");
     _server.sendContent(wifiCard);
     
@@ -669,23 +669,23 @@ void WebPortal::handleRoot() {
         String meshCard;
         meshCard.reserve(384);
         meshCard += F("<div class='card'>");
-        meshCard += F("<h3>🌐 Mesh Network</h3>");
+        meshCard += F("<h3 data-i18n-ru='🌐 Сеть Mesh' data-i18n-en='🌐 Mesh Network'>🌐 Сеть Mesh</h3>");
         
         if (meshMgr.isConnected()) {
-            meshCard += F("<p><span class='badge badge-green'>Connected</span></p>");
-            meshCard += F("<p>Nodes: <b>");
+            meshCard += F("<p><span class='badge badge-green' data-i18n-ru='Подключено' data-i18n-en='Connected'>Подключено</span></p>");
+            meshCard += F("<p>Узлы: <b>");
             meshCard += meshMgr.getConnectedCount();
             meshCard += F("</b></p>");
         } else {
-            meshCard += F("<p><span class='badge badge-yellow'>Waiting</span></p>");
+            meshCard += F("<p><span class='badge badge-yellow' data-i18n-ru='Ожидание' data-i18n-en='Waiting'>Ожидание</span></p>");
         }
         
-        meshCard += F("<p>Node ID: 0x");
+        meshCard += F("<p>ID узла: 0x");
         char idbuf[16];
         snprintf(idbuf, sizeof(idbuf), "%X", meshMgr.getNodeId());
         meshCard += idbuf;
         meshCard += F("</p>");
-        meshCard += F("<p><a href='/mesh'>⚙ Mesh Settings</a></p>");
+        meshCard += F("<p><a href='/mesh' data-i18n-ru='⚙ Настройки Mesh' data-i18n-en='⚙ Mesh Settings'>⚙ Настройки Mesh</a></p>");
         meshCard += F("</div>");
         _server.sendContent(meshCard);
     }
@@ -695,10 +695,10 @@ void WebPortal::handleRoot() {
         String fixCard;
         fixCard.reserve(384);
         fixCard += F("<div class='card'>");
-        fixCard += F("<h3>💡 Light Fixture</h3>");
+        fixCard += F("<h3 data-i18n-ru='💡 Светильник' data-i18n-en='💡 Light Fixture'>💡 Светильник</h3>");
         
         if (_fixture->isEnabled()) {
-            fixCard += F("<p><span class='badge badge-green'>Active</span></p>");
+            fixCard += F("<p><span class='badge badge-green' data-i18n-ru='Включен' data-i18n-en='Active'>Включен</span></p>");
             fixCard += F("<p style='font-size:18px'>");
             fixCard += F("R: <b>"); fixCard += _fixture->getRed(); fixCard += F("%</b> | ");
             fixCard += F("FR: <b>"); fixCard += _fixture->getFarRed(); fixCard += F("%</b> | ");
@@ -706,10 +706,10 @@ void WebPortal::handleRoot() {
             fixCard += F("W: <b>"); fixCard += _fixture->getWhite(); fixCard += F("%</b>");
             fixCard += F("</p>");
         } else {
-            fixCard += F("<p><span class='badge badge-red'>Disabled</span></p>");
+            fixCard += F("<p><span class='badge badge-red' data-i18n-ru='Отключен' data-i18n-en='Disabled'>Отключен</span></p>");
         }
         
-        fixCard += F("<p><a href='/fixtures'>⚙ Fixture Control</a></p>");
+        fixCard += F("<p><a href='/fixtures' data-i18n-ru='⚙ Управление светильником' data-i18n-en='⚙ Fixture Control'>⚙ Управление светильником</a></p>");
         fixCard += F("</div>");
         _server.sendContent(fixCard);
     }
@@ -718,11 +718,11 @@ void WebPortal::handleRoot() {
     String links;
     links.reserve(256);
     links += F("<div class='card'>");
-    links += F("<h3>🔗 Quick Links</h3>");
+    links += F("<h3 data-i18n-ru='🔗 Быстрые ссылки' data-i18n-en='🔗 Quick Links'>🔗 Быстрые ссылки</h3>");
     links += F("<p>");
-    links += F("<a href='/system'>System</a> | ");
-    links += F("<a href='/fixtures'>Fixtures</a> | ");
-    links += F("<a href='/mesh'>Mesh</a>");
+    links += F("<a href='/system' data-i18n-ru='Система' data-i18n-en='System'>Система</a> | ");
+    links += F("<a href='/fixtures' data-i18n-ru='Светильники' data-i18n-en='Fixtures'>Светильники</a> | ");
+    links += F("<a href='/mesh' data-i18n-ru='Сеть Mesh' data-i18n-en='Mesh'>Сеть Mesh</a>");
     links += F("</p>");
     links += F("</div>");
     _server.sendContent(links);
