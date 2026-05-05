@@ -135,10 +135,20 @@ static bool isLoopProneMeshCommand(const String& cmd) {
     }
 }
 
+void Setup_init_lights() {
+    configMgr.cfg.fixture.red_brightness = 0;
+    configMgr.cfg.fixture.far_red_brightness = 0;
+    configMgr.cfg.fixture.blue_brightness = 0;
+    configMgr.cfg.fixture.white_brightness = 0;
+    if (fixtureMgr.isEnabled()) {
+        fixtureMgr.setChannels(0, 0, 0, 0);
+    }
+}
+
 void setup() {
     // Disable task watchdog to prevent resets during long operations
-    esp_task_wdt_init(30, false); // 30 seconds, no panic
-    esp_task_wdt_delete(NULL); // Remove current task from WDT
+    esp_task_wdt_init(30, false);
+    esp_task_wdt_delete(NULL);
 
     Serial.begin(115200);
     delay(500);
@@ -153,6 +163,8 @@ void setup() {
     esp_log_level_set("esp_netif_handlers", ESP_LOG_WARN);
 
     configMgr.begin();
+
+    Setup_init_lights();
 
     Serial.println(F("\n"
         "\033[36m"
