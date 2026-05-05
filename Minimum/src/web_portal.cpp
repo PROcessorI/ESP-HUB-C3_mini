@@ -1170,8 +1170,9 @@ void WebPortal::handleMesh() {
 
     // Microchat + relay tools
     String tools;
+    tools += F("<div id='mesh-buttons-container'>");
     tools += F("<div style='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick='meshToggleHelp()' data-i18n-ru='\u0421\u043f\u0440\u0430\u0432\u043a\u0430' data-i18n-en='Help'>\u0421\u043f\u0440\u0430\u0432\u043a\u0430</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick='meshToggleHelp()' data-i18n-ru='\u0421\u043f\u0440\u0430\u0432\u043a\u0430' data-i18n-en='Help'>\u0421\u043f\u0440\u0430\u0432\u043a\u0430</button>");
     tools += F("<div class='text-muted' id='mesh-mode-hint' data-i18n-ru='\u0427\u0430\u0442 \u0438 \u043a\u043e\u043c\u0430\u043d\u0434\u044b: all \u0438\u043b\u0438 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u044b\u0439 node' data-i18n-en='Chat and commands: all or a selected node'>\u0427\u0430\u0442 \u0438 \u043a\u043e\u043c\u0430\u043d\u0434\u044b: all \u0438\u043b\u0438 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u044b\u0439 node</div></div>");
 
     tools += F("<div id='mesh-help' style='display:none;background:var(--bg3);border:1px solid var(--brd);border-radius:8px;padding:10px;margin-bottom:10px'>");
@@ -1179,61 +1180,47 @@ void WebPortal::handleMesh() {
     tools += F("</div>");
 
     tools += F("<div class='grid2'>");
-    tools += F("<div><label>\u041c\u0438\u043a\u0440\u043e\u0447\u0430\u0442</label><select id='mesh-chat-target'><option value='all'>all</option></select><input type='text' id='mesh-chat-text' placeholder='\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0432 mesh' class='mt'><button class='btn btn-secondary mt' onclick='meshSendChat()' data-i18n-ru='\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c' data-i18n-en='Send'>\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c</button></div>");
-    tools += F("<div><label>\u041f\u0435\u0440\u0435\u0434\u0430\u0447\u0430 \u0434\u0430\u043d\u043d\u044b\u0445</label><input type='text' id='mesh-data-topic' placeholder='topic'><input type='text' id='mesh-data-payload' placeholder='payload' class='mt'><button class='btn btn-secondary mt' onclick='meshSendData()' data-i18n-ru='\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435' data-i18n-en='Send data'>\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435</button></div>");
+    tools += F("<div><label>\u041c\u0438\u043a\u0440\u043e\u0447\u0430\u0442</label><select id='mesh-chat-target'><option value='all'>all</option></select><input type='text' id='mesh-chat-text' placeholder='\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0432 mesh' class='mt'><button class='btn btn-secondary mt mesh-btn' onclick='meshSendChat()' data-i18n-ru='\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c' data-i18n-en='Send'>\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c</button></div>");
+    tools += F("<div><label>\u041f\u0435\u0440\u0435\u0434\u0430\u0447\u0430 \u0434\u0430\u043d\u043d\u044b\u0445</label><input type='text' id='mesh-data-topic' placeholder='topic'><input type='text' id='mesh-data-payload' placeholder='payload' class='mt'><button class='btn btn-secondary mt mesh-btn' onclick='meshSendData()' data-i18n-ru='\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435' data-i18n-en='Send data'>\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435</button></div>");
     tools += F("</div>");
 
     tools += F("<label class='mt'>\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u0430\u044f \u043a\u043e\u043c\u0430\u043d\u0434\u0430 (Serial syntax)</label>");
     tools += F("<select id='mesh-cmd-target'><option value='all'>all</option></select>");
     tools += F("<label class='mt' style='display:flex;align-items:center;gap:8px'><input type='checkbox' id='mesh-run-local' checked><span data-i18n-ru='\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0442\u044c \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u043d\u043e\u0434\u0435' data-i18n-en='Run on this node'>\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0442\u044c \u043d\u0430 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u043d\u043e\u0434\u0435</span></label>");
     tools += F("<input type='text' id='mesh-cmd-line' placeholder='\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: light red' class='mt'>");
-    tools += F("<button class='btn btn-primary mt' onclick='meshSendCmd()' data-i18n-ru='\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443' data-i18n-en='Run command'>\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443</button>");
+    tools += F("<button class='btn btn-primary mt mesh-btn' onclick='meshSendCmd()' data-i18n-ru='\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443' data-i18n-en='Run command'>\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043a\u043e\u043c\u0430\u043d\u0434\u0443</button>");
 
     tools += F("<div class='mt' style='display:grid;gap:8px'>");
     tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: \u0421\u0432\u0435\u0442\u0438\u043b\u044c\u043d\u0438\u043a\u0438' data-i18n-en='Presets: Fixtures'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: \u0421\u0432\u0435\u0442\u0438\u043b\u044c\u043d\u0438\u043a\u0438</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('light on')\" data-i18n-ru='\u0412\u043a\u043b' data-i18n-en='On'>\u0412\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('light off')\" data-i18n-ru='\u0412\u044b\u043a\u043b' data-i18n-en='Off'>\u0412\u044b\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunLightPreset('red')\" data-i18n-ru='\u041a\u0440\u0430\u0441\u043d\u044b\u0439' data-i18n-en='Red'>\u041a\u0440\u0430\u0441\u043d\u044b\u0439</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunLightPreset('blue')\" data-i18n-ru='\u0421\u0438\u043d\u0438\u0439' data-i18n-en='Blue'>\u0421\u0438\u043d\u0438\u0439</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunLightPreset('white')\" data-i18n-ru='\u0411\u0435\u043b\u044b\u0439' data-i18n-en='White'>\u0411\u0435\u043b\u044b\u0439</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunLightPreset('grow')\" data-i18n-ru='\u0420\u043e\u0441\u0442' data-i18n-en='Grow'>\u0420\u043e\u0441\u0442</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('light status')\" data-i18n-ru='\u0421\u0442\u0430\u0442\u0443\u0441' data-i18n-en='Status'>\u0421\u0442\u0430\u0442\u0443\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('dim up 10')\" data-i18n-ru='\u042f\u0440\u0447\u0435' data-i18n-en='Brighter'>\u042f\u0440\u0447\u0435</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('dim down 10')\" data-i18n-ru='\u0422\u0435\u043c\u043d\u0435\u0435' data-i18n-en='Darker'>\u0422\u0435\u043c\u043d\u0435\u0435</button>");
-    tools += F("<div style='width:100%;margin-top:8px'><label data-i18n-ru='\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)' data-i18n-en='Preset brightness (%)'>\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)</label><input type='range' id='mesh-light-br' min='0' max='100' value='100'><div class='text-muted' id='mesh-light-br-text'>100%</div></div>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('light off')\" data-i18n-ru='\u0412\u044b\u043a\u043b' data-i18n-en='Off'>\u0412\u044b\u043a\u043b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunLightPreset('red')\" data-i18n-ru='\u041a\u0440\u0430\u0441\u043d\u044b\u0439' data-i18n-en='Red'>\u041a\u0440\u0430\u0441\u043d\u044b\u0439</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunLightPreset('blue')\" data-i18n-ru='\u0421\u0438\u043d\u0438\u0439' data-i18n-en='Blue'>\u0421\u0438\u043d\u0438\u0439</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunLightPreset('white')\" data-i18n-ru='\u0411\u0435\u043b\u044b\u0439' data-i18n-en='White'>\u0411\u0435\u043b\u044b\u0439</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunLightPreset('grow')\" data-i18n-ru='\u0420\u043e\u0441\u0442' data-i18n-en='Grow'>\u0420\u043e\u0441\u0442</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('light status')\" data-i18n-ru='\u0421\u0442\u0430\u0442\u0443\u0441' data-i18n-en='Status'>\u0421\u0442\u0430\u0442\u0443\u0441</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('dim up 10')\" data-i18n-ru='\u042f\u0440\u0447\u0435' data-i18n-en='Brighter'>\u042f\u0440\u0447\u0435</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('dim down 10')\" data-i18n-ru='\u0422\u0435\u043c\u043d\u0435\u0435' data-i18n-en='Darker'>\u0422\u0435\u043c\u043d\u0435\u0435</button>");
+    tools += F("<div style='width:100%;margin-top:8px'><label data-i18n-ru='\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)' data-i18n-en='Preset brightness (%)'>\u042f\u0440\u043a\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0441\u0435\u0442\u0430 (%)</label><div style='display:flex;gap:8px'><input type='range' id='mesh-light-br' min='0' max='100' value='100' style='flex:1'><input type='number' id='mesh-light-br-num' min='0' max='100' value='100' style='width:60px'></div></div>");
     tools += F("</div></details>");
 
     tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Mesh \u0441\u0435\u0440\u0432\u0438\u0441' data-i18n-en='Presets: Mesh service'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Mesh \u0441\u0435\u0440\u0432\u0438\u0441</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('mesh status')\" data-i18n-ru='\u0421\u0442\u0430\u0442\u0443\u0441' data-i18n-en='Status'>\u0421\u0442\u0430\u0442\u0443\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('mesh nodes')\" data-i18n-ru='\u0423\u0437\u043b\u044b' data-i18n-en='Nodes'>\u0423\u0437\u043b\u044b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('mesh log')\" data-i18n-ru='\u041b\u043e\u0433' data-i18n-en='Log'>\u041b\u043e\u0433</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('mesh status')\" data-i18n-ru='\u0421\u0442\u0430\u0442\u0443\u0441' data-i18n-en='Status'>\u0421\u0442\u0430\u0442\u0443\u0441</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('mesh nodes')\" data-i18n-ru='\u0423\u0437\u043b\u044b' data-i18n-en='Nodes'>\u0423\u0437\u043b\u044b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('mesh log')\" data-i18n-ru='\u041b\u043e\u0433' data-i18n-en='Log'>\u041b\u043e\u0433</button>");
     tools += F("</div></details>");
 
-    tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: \u0421\u0435\u0442\u044c \u0438 \u0442\u0435\u043b\u0435\u043c\u0435\u0442\u0440\u0438\u044f' data-i18n-en='Presets: Network & telemetry'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: \u0421\u0435\u0442\u044c \u0438 \u0442\u0435\u043b\u0435\u043c\u0435\u0442\u0440\u0438\u044f</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('status')\" data-i18n-ru='\u0421\u0442\u0430\u0442\u0443\u0441' data-i18n-en='Status'>\u0421\u0442\u0430\u0442\u0443\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('sensors')\" data-i18n-ru='\u0414\u0430\u0442\u0447\u0438\u043a\u0438' data-i18n-en='Sensors'>\u0414\u0430\u0442\u0447\u0438\u043a\u0438</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('read')\" data-i18n-ru='\u0421\u0447\u0438\u0442\u0430\u0442\u044c \u0441\u0435\u0439\u0447\u0430\u0441' data-i18n-en='Read now'>\u0421\u0447\u0438\u0442\u0430\u0442\u044c \u0441\u0435\u0439\u0447\u0430\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('clock')\" data-i18n-ru='\u0427\u0430\u0441\u044b' data-i18n-en='Clock'>\u0427\u0430\u0441\u044b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('wifi status')\" data-i18n-ru='WiFi \u0441\u0442\u0430\u0442\u0443\u0441' data-i18n-en='WiFi'>WiFi \u0441\u0442\u0430\u0442\u0443\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('wifi scan')\" data-i18n-ru='\u0421\u043a\u0430\u043d WiFi' data-i18n-en='WiFi scan'>\u0421\u043a\u0430\u043d WiFi</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('mqtt status')\">MQTT</button>");
-    tools += F("</div></details>");
+    // Network & telemetry removed
 
     tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: \u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0438 \u0438 \u0442\u0430\u0439\u043c\u0435\u0440\u044b' data-i18n-en='Presets: Scenarios & Timers'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: \u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0438 \u0438 \u0442\u0430\u0439\u043c\u0435\u0440\u044b</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('timer list')\" data-i18n-ru='\u0422\u0430\u0439\u043c\u0435\u0440\u044b' data-i18n-en='Timers'>\u0422\u0430\u0439\u043c\u0435\u0440\u044b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('timer enable 0')\" data-i18n-ru='\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u043a\u043b' data-i18n-en='Timer 0 on'>\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('timer disable 0')\" data-i18n-ru='\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u044b\u043a\u043b' data-i18n-en='Timer 0 off'>\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u044b\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('scenario list')\" data-i18n-ru='\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0438' data-i18n-en='Scenarios'>\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0438</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('scenario enable 0')\" data-i18n-ru='\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u043a\u043b' data-i18n-en='Scenario 0 on'>\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('scenario disable 0')\" data-i18n-ru='\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u044b\u043a\u043b' data-i18n-en='Scenario 0 off'>\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u044b\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('json')\">JSON</button>");
-    tools += F("</div></details>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('timer list')\" data-i18n-ru='\u0422\u0430\u0439\u043c\u0435\u0440\u044b' data-i18n-en='Timers'>\u0422\u0430\u0439\u043c\u0435\u0440\u044b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('timer enable 0')\" data-i18n-ru='\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u043a\u043b' data-i18n-en='Timer 0 on'>\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u043a\u043b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('timer disable 0')\" data-i18n-ru='\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u044b\u043a\u043b' data-i18n-en='Timer 0 off'>\u0422\u0430\u0439\u043c\u0435\u0440 0 \u0432\u044b\u043a\u043b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('scenario list')\" data-i18n-ru='\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0438' data-i18n-en='Scenarios'>\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0438</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('scenario enable 0')\" data-i18n-ru='\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u043a\u043b' data-i18n-en='Scenario 0 on'>\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u043a\u043b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('scenario disable 0')\" data-i18n-ru='\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u044b\u043a\u043b' data-i18n-en='Scenario 0 off'>\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 0 \u0432\u044b\u043a\u043b</button>");
+    tools += F("<button class='btn btn-secondary mesh-btn' type='button' onclick=\"meshRunPreset('json')\">JSON</button>");
+    tools += F("</div></details></div>");
 
-    tools += F("<details><summary data-i18n-ru='\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Bluetooth' data-i18n-en='Presets: Bluetooth'>\u041f\u0440\u0435\u0441\u0435\u0442\u044b: Bluetooth</summary><div style='display:flex;gap:6px;flex-wrap:wrap;margin-top:8px'>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ble status')\" data-i18n-ru='BLE \u0441\u0442\u0430\u0442\u0443\u0441' data-i18n-en='BLE status'>BLE \u0441\u0442\u0430\u0442\u0443\u0441</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ble on')\" data-i18n-ru='BLE \u0432\u043a\u043b' data-i18n-en='BLE on'>BLE \u0432\u043a\u043b</button>");
-    tools += F("<button class='btn btn-secondary' type='button' onclick=\"meshRunPreset('ble off')\" data-i18n-ru='BLE \u0432\u044b\u043a\u043b' data-i18n-en='BLE off'>BLE \u0432\u044b\u043a\u043b</button>");
-    tools += F("</div></details>");
     tools += F("</div>");
 
     tools += F("<div id='mesh-send-status' class='text-muted mt'></div>");
@@ -1318,8 +1305,8 @@ void WebPortal::handleMesh() {
         "}"
         "function meshUpdateBrightnessLabel(){"
         "  var s=document.getElementById('mesh-light-br');"
-        "  var t=document.getElementById('mesh-light-br-text');"
-        "  if(s&&t) t.textContent=(s.value||100)+'%';"
+        "  var n=document.getElementById('mesh-light-br-num');"
+        "  if(s&&n) n.value=s.value;"
         "}"
         "function meshSetBrightness(v){"
         "  var s=document.getElementById('mesh-light-br');"
@@ -1350,6 +1337,23 @@ void WebPortal::handleMesh() {
         "  return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data}).then(function(r){return r.json();});"
         "}"
         "function meshSetStatus(t){var el=document.getElementById('mesh-send-status');if(el)el.textContent=t;}"
+        "document.addEventListener('DOMContentLoaded',function(){"
+        "  document.querySelectorAll('.mesh-btn').forEach(function(b){"
+        "    b.addEventListener('click',function(){"
+        "      if(this.disabled) return;"
+        "      var ob=this.style.backgroundColor;var oc=this.style.color;"
+        "      this.style.backgroundColor='#dc3545';this.style.color='#fff';"
+        "      this.disabled=true;this.style.pointerEvents='none';"
+        "      setTimeout(()=>{this.style.backgroundColor=ob;this.style.color=oc;this.disabled=false;this.style.pointerEvents='';},3000);"
+        "    });"
+        "  });"
+        "  var rng=document.getElementById('mesh-light-br');"
+        "  var num=document.getElementById('mesh-light-br-num');"
+        "  if(rng&&num){"
+        "    rng.addEventListener('input',function(){num.value=rng.value;});"
+        "    num.addEventListener('input',function(){rng.value=num.value;});"
+        "  }"
+        "});"
         "function meshToggleHelp(){"
         "  var el=document.getElementById('mesh-help');if(!el)return;"
         "  el.style.display=(el.style.display==='none'||!el.style.display)?'block':'none';"
